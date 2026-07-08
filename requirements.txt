@@ -1,0 +1,10 @@
+# Core RAG framework
+llama-index
+
+# Local vector storage option for the first MVP
+chromadb
+
+# Utilities for future configuration and testing
+python-dotenv
+pytest
+

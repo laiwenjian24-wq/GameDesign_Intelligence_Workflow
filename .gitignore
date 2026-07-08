@@ -1,0 +1,57 @@
+# Python cache / build artifacts
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment / local secrets
+.env
+.env.*
+!.env.example
+
+# IDE / editor local files
+.vscode/
+.idea/
+.obsidian/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local generated outputs
+outputs/
+tmp/
+temp/
+test_output/
+
+# Generated knowledge-base artifacts
+knowledge_base/processed/
+knowledge_base/index/
+
+# Local scratch / temporary assets
+knowledge_base/test_assets/
+
+# Logs
+*.log
+
+# Large binary media assets
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.mp4

@@ -1,0 +1,128 @@
+[
+  {
+    "file_path": "E:\\desktop\\stupid创作及其素材\\stupid笔记\\STUPID游戏世界观设定集.md",
+    "asset_type": "worldbuilding",
+    "status": "canon",
+    "confidence": "high",
+    "tags": ["worldbuilding", "SDFT", "Judgment Day", "Nexus", "Tyrell", "Cancel", "IPW", "organization"],
+    "reason": "项目总世界观设定集，覆盖 SDFT、审判日、阶级、组织、Nexus、冬眠者社区等核心事实。",
+    "expected_usage": "用于 Context Pack 的项目背景、世界观规则和 Canon Evidence。"
+  },
+  {
+    "file_path": "E:\\desktop\\stupid创作及其素材\\stupid笔记\\时间线.md",
+    "asset_type": "timeline",
+    "status": "canon",
+    "confidence": "high",
+    "tags": ["timeline", "chapter_order", "branch_b", "wound_state", "Mouse", "Rin"],
+    "reason": "主线时间线与第九章《风筝》状态依据，明确 Branch B 中 Mouse 右肩负伤、Rin 左腿擦伤。",
+    "expected_usage": "用于 continuity_checker 的时间线、分支状态和伤势 Canon Evidence。"
+  },
+  {
+    "file_path": "E:\\desktop\\stupid创作及其素材\\stupid笔记\\故事大纲与角色设定.md",
+    "asset_type": "character",
+    "status": "canon",
+    "confidence": "high",
+    "tags": ["character", "story_outline", "relationship", "Mouse", "Rin", "Larry", "Snow", "Rain", "Julie"],
+    "reason": "整合角色背景、两条主线、章节结构和第九章 Demo 说明，可作为角色关系和主线事实源。",
+    "expected_usage": "用于 Context Pack 的角色关系、角色弧光和未来 Dynamic Voice Context Builder。"
+  },
+  {
+    "file_path": "E:\\desktop\\stupid创作及其素材\\stupid笔记\\章节.md",
+    "asset_type": "timeline",
+    "status": "canon",
+    "confidence": "high",
+    "tags": ["chapter_index", "timeline", "current_version", "old_draft_boundary"],
+    "reason": "记录当前章节顺序、已完成章节和旧稿待重排说明，可帮助区分现行版本与旧稿。",
+    "expected_usage": "用于连续性检查中的章节顺序判断和 Deprecated 边界判断。"
+  },
+  {
+    "file_path": "E:\\desktop\\stupid创作及其素材\\stupid笔记\\组织.md",
+    "asset_type": "worldbuilding",
+    "status": "canon",
+    "confidence": "high",
+    "tags": ["organization", "IPW", "Tyrell", "Cancel", "Second Foundation", "Brain Ladder"],
+    "reason": "组织关系设定文件，覆盖 IPW、脑梯、泰瑞尔、堪恩索、第二基地等势力。",
+    "expected_usage": "用于 Context Pack 的组织背景和世界观规则引用。"
+  },
+  {
+    "file_path": "E:\\desktop\\stupid创作及其素材\\stupid笔记\\概念.md",
+    "asset_type": "worldbuilding",
+    "status": "canon",
+    "confidence": "medium",
+    "tags": ["concept", "SDFT", "Brain Ladder", "Doublt Shadow", "Intelligence BOOM"],
+    "reason": "概念解释文件，适合补充世界观术语和机制说明。",
+    "expected_usage": "用于检索世界观术语、补充 Context Pack 的机制解释。"
+  },
+  {
+    "file_path": "E:\\desktop\\stupid创作及其素材\\stupid笔记\\世界观概述.md",
+    "asset_type": "worldbuilding",
+    "status": "canon",
+    "confidence": "high",
+    "tags": ["overview", "worldbuilding", "project_summary"],
+    "reason": "短版世界观入口文档，适合提供高层摘要。",
+    "expected_usage": "用于 Context Pack 的 project_context 和世界观摘要召回。"
+  },
+  {
+    "file_path": "E:\\desktop\\stupid创作及其素材\\stupid笔记\\任务设计_风筝.md",
+    "asset_type": "branch",
+    "status": "canon",
+    "confidence": "high",
+    "tags": ["kite", "quest_design", "branch", "scene_flow", "A", "B", "C", "Mouse", "Rin"],
+    "reason": "《风筝》任务设计核心文件，覆盖任务流程、玩家选择、分支后果和场景功能。",
+    "expected_usage": "用于 Context Pack、continuity_checker、Branch 连续性和场景功能测试。"
+  },
+  {
+    "file_path": "E:\\desktop\\stupid创作及其素材\\stupid笔记\\Chapter 9 风筝.md",
+    "asset_type": "scene",
+    "status": "canon",
+    "confidence": "high",
+    "tags": ["chapter_9", "kite", "scene", "dialogue", "branch_b", "Mouse", "Rin"],
+    "reason": "第九章《风筝》正文，适合验证正文语气、角色关系和任务设计一致性。",
+    "expected_usage": "用于 Context Pack 的场景依据、未来 Voice Context 样本文本和对白参考。"
+  },
+  {
+    "file_path": "E:\\desktop\\游戏策划\\STUPID作品集整理\\RenPy_CG_接入映射.md",
+    "asset_type": "visual_reference",
+    "status": "canon",
+    "confidence": "high",
+    "tags": ["CG_mapping", "visual_reference", "branch_b", "wound_state", "Mouse", "Rin", "Mombasa"],
+    "reason": "CG、分镜、分支和场景功能映射文件，明确 Branch B 中 Rin 左腿、Mouse 右肩和 Mombasa 安全屋。",
+    "expected_usage": "用于 continuity_checker 的伤势 Canon Evidence，以及 Context Pack 的 visual_reference。"
+  },
+  {
+    "file_path": "E:\\desktop\\游戏策划\\STUPID作品集整理\\RenPy_Demo_升级规划.md",
+    "asset_type": "branch",
+    "status": "canon",
+    "confidence": "medium",
+    "tags": ["RenPy", "demo_scope", "branch_variables", "A", "B", "C", "Mouse", "Rin"],
+    "reason": "Demo 范围、三分支、变量结算、角色素材和任务展示目标说明。",
+    "expected_usage": "用于 Branch 状态、Demo 实现意图和后续 Ren'Py 脚本导入前的参考。"
+  },
+  {
+    "file_path": "E:\\desktop\\stupid创作及其素材\\stupid笔记\\场景草稿_风筝（旧版）.md",
+    "asset_type": "deprecated",
+    "status": "deprecated",
+    "confidence": "high",
+    "tags": ["old_version", "deprecated", "kite", "right_leg_conflict", "Mouse", "Rin"],
+    "reason": "文件自身标注为早期版本且已被新分镜替代，包含 Rin 右腿等旧设定。",
+    "expected_usage": "用于 Deprecated Evidence、旧版设定冲突检测和 Canon / Deprecated 区分测试。"
+  },
+  {
+    "file_path": "E:\\desktop\\stupid创作及其素材\\stupid笔记\\分镜06_对白草稿.md",
+    "asset_type": "dialogue",
+    "status": "draft",
+    "confidence": "medium",
+    "tags": ["dialogue", "safehouse", "wound_care", "voice_context", "Mouse", "Rin", "Branch B", "contains_old_right_leg_conflict"],
+    "reason": "安全屋 / 鼠的住处段落对白草稿，可用于角色口吻和关系推进测试；但包含旧右腿伤势风险。",
+    "expected_usage": "用于 Draft Reference、未来 Dynamic Voice Context Builder；不能作为 Canon 伤势依据。"
+  },
+  {
+    "file_path": "E:\\desktop\\stupid创作及其素材\\stupid笔记\\灵感碎片.md",
+    "asset_type": "inspiration",
+    "status": "inspiration",
+    "confidence": "medium",
+    "tags": ["inspiration", "early_name", "Lily", "Rin", "style_reference", "not_fact_source"],
+    "reason": "灵感和早期命名记录，包含 Lily 到 Rin 的废弃命名线索，不应进入事实层。",
+    "expected_usage": "用于 Inspiration Context 测试，验证灵感资料不会污染 Canon。"
+  }
+]
