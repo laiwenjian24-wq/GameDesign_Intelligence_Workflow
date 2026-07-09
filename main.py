@@ -1,22 +1,19 @@
-"""Entry point for the first Narrative Workflow MVP.
+"""Entry point for the Narrative Workflow CLI.
 
-Current first-version behavior:
-
-1. Markdown / TXT ingestion
-2. rule-based metadata draft generation
-3. JSONL output to knowledge_base/processed/metadata.jsonl
-4. keyword search over metadata and raw source text
-
-No LLM call, vector index, or complex RAG logic is implemented here.
+The default no-argument command still runs the original ingestion workflow.
 """
 
 from pathlib import Path
 import sys
+from typing import List
 
 from src.context.context_builder import (
     build_context_pack,
     format_context_pack_markdown,
 )
+from src.context.llamaindex_context_builder import build_context_pack_with_llamaindex
+from src.llm.client import FakeLLMClient
+from src.rag.llamaindex_ingest import build_llamaindex_nodes
 from src.retrieval.index_builder import build_index
 from src.retrieval.query import query_knowledge_base
 from src.workflows.continuity_checker import (
@@ -30,6 +27,16 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 RAW_ASSETS_DIR = PROJECT_ROOT / "knowledge_base" / "raw_assets"
 PROCESSED_DIR = PROJECT_ROOT / "knowledge_base" / "processed"
 INDEX_DIR = PROJECT_ROOT / "knowledge_base" / "index"
+LLAMA_INDEX_DIR = PROJECT_ROOT / "knowledge_base" / "llama_index"
+
+AVAILABLE_COMMANDS = [
+    "ingest",
+    "search",
+    "context",
+    "context-rag",
+    "context-rag-llm",
+    "check",
+]
 
 
 def run_ingestion() -> None:
@@ -85,25 +92,176 @@ def run_context(task: str) -> None:
     print(format_context_pack_markdown(context_pack))
 
 
-def main() -> None:
-    """Run ingestion by default, search, continuity check, or context pack."""
-    if len(sys.argv) >= 2 and sys.argv[1] == "ingest":
+def _append_rag_evidence(lines: List[str], citations: List[dict]) -> None:
+    """Append RAG evidence with score and text excerpt."""
+    if not citations:
+        lines.append("- None")
+        return
+
+    for citation in citations:
+        lines.append(f"- source_file: {citation.get('source_file', '')}")
+        lines.append(f"  - status: {citation.get('status', 'unknown')}")
+        lines.append(f"  - score: {citation.get('score', 0)}")
+        lines.append(f"  - retrieval_mode: {citation.get('retrieval_mode', 'unknown')}")
+        lines.append(
+            f"  - used_real_llamaindex: {citation.get('used_real_llamaindex', False)}"
+        )
+        lines.append(f"  - fallback: {citation.get('fallback', True)}")
+        lines.append(f"  - excerpt: {citation.get('excerpt', '')}")
+        text = citation.get("text", "")
+        if text:
+            compact_text = " ".join(text.split())
+            lines.append(f"  - text: {compact_text[:260]}")
+        if citation.get("reason_used"):
+            lines.append(f"  - reason_used: {citation.get('reason_used', '')}")
+
+
+def format_llamaindex_context_report(context_pack: dict) -> str:
+    """Format an experimental LlamaIndex Context Pack for CLI output."""
+    task_context = context_pack.get("task_context", {})
+    retrieval_metadata = context_pack.get("retrieval_metadata", {})
+    lines = [
+        "# Experimental RAG Context Pack",
+        "",
+        "## Task",
+        f"- {task_context.get('task', '')}",
+        "",
+        "## Retrieval",
+        f"- retrieval_mode: {retrieval_metadata.get('retrieval_mode', 'unknown')}",
+        f"- used_real_llamaindex: {retrieval_metadata.get('used_real_llamaindex', False)}",
+        f"- fallback: {retrieval_metadata.get('fallback', True)}",
+        "",
+    ]
+
+    retrieval_plan = context_pack.get("retrieval_plan")
+    if retrieval_plan:
+        lines.extend(
+            [
+                "## Retrieval Plan",
+                f"- intent: {retrieval_plan.get('intent', '')}",
+                f"- entities: {', '.join(retrieval_plan.get('entities', []))}",
+                "- rewritten_queries:",
+            ]
+        )
+        for query in retrieval_plan.get("rewritten_queries", []):
+            lines.append(f"  - {query}")
+        lines.extend(
+            [
+                f"- forbidden_fact_statuses: {', '.join(retrieval_plan.get('forbidden_fact_statuses', []))}",
+                f"- confidence: {retrieval_plan.get('confidence', '')}",
+                "",
+            ]
+        )
+
+    lines.append("## Canon Context")
+
+    _append_rag_evidence(lines, context_pack.get("canon_context", []))
+
+    lines.extend(["", "## Draft Reference"])
+    _append_rag_evidence(lines, context_pack.get("draft_reference", []))
+
+    lines.extend(["", "## Deprecated Warnings"])
+    _append_rag_evidence(lines, context_pack.get("deprecated_warnings", []))
+
+    lines.extend(["", "## Missing Evidence"])
+    missing = context_pack.get("missing_evidence", [])
+    if missing:
+        for item in missing:
+            lines.append(f"- {item}")
+    else:
+        lines.append("- None")
+
+    lines.extend(["", "## Restrictions"])
+    for restriction in context_pack.get("restrictions", []):
+        lines.append(f"- {restriction}")
+
+    selection = context_pack.get("llm_evidence_selection")
+    if selection:
+        lines.extend(["", "## Rejected Evidence"])
+        rejected = selection.get("rejected", [])
+        if rejected:
+            for item in rejected:
+                lines.append(
+                    f"- {item.get('source_file', '')} [{item.get('status', 'unknown')}]: "
+                    f"{item.get('reason', '')}"
+                )
+        else:
+            lines.append("- None")
+
+    return "\n".join(lines)
+
+
+def run_context_rag(task: str) -> None:
+    """Build and print an experimental LlamaIndex-backed Context Pack."""
+    build_llamaindex_nodes(index_dir=LLAMA_INDEX_DIR)
+    context_pack = build_context_pack_with_llamaindex(
+        task,
+        top_k=8,
+        index_dir=LLAMA_INDEX_DIR,
+    )
+    print(format_llamaindex_context_report(context_pack))
+
+
+def run_context_rag_llm(task: str) -> None:
+    """Build and print an LLM-assisted LlamaIndex Context Pack."""
+    build_llamaindex_nodes(index_dir=LLAMA_INDEX_DIR)
+    context_pack = build_context_pack_with_llamaindex(
+        task,
+        top_k=8,
+        index_dir=LLAMA_INDEX_DIR,
+        use_llm_assist=True,
+        llm_client=FakeLLMClient(),
+    )
+    print(format_llamaindex_context_report(context_pack))
+
+
+def print_available_commands() -> None:
+    """Print available CLI commands."""
+    print("Available commands:")
+    for command in AVAILABLE_COMMANDS:
+        print(f"- {command}")
+
+
+def dispatch(argv: List[str]) -> int:
+    """Dispatch CLI arguments and return a process exit code."""
+    if not argv:
         run_ingestion()
-        return
+        return 0
 
-    if len(sys.argv) >= 3 and sys.argv[1] == "search":
-        run_search(" ".join(sys.argv[2:]))
-        return
+    command = argv[0]
 
-    if len(sys.argv) >= 3 and sys.argv[1] == "check":
-        run_check(" ".join(sys.argv[2:]))
-        return
+    if command == "ingest":
+        run_ingestion()
+        return 0
 
-    if len(sys.argv) >= 3 and sys.argv[1] == "context":
-        run_context(" ".join(sys.argv[2:]))
-        return
+    if command == "search" and len(argv) >= 2:
+        run_search(" ".join(argv[1:]))
+        return 0
 
-    run_ingestion()
+    if command == "check" and len(argv) >= 2:
+        run_check(" ".join(argv[1:]))
+        return 0
+
+    if command == "context" and len(argv) >= 2:
+        run_context(" ".join(argv[1:]))
+        return 0
+
+    if command == "context-rag" and len(argv) >= 2:
+        run_context_rag(" ".join(argv[1:]))
+        return 0
+
+    if command == "context-rag-llm" and len(argv) >= 2:
+        run_context_rag_llm(" ".join(argv[1:]))
+        return 0
+
+    print(f"Unknown command: {command}")
+    print_available_commands()
+    return 1
+
+
+def main() -> None:
+    """Run the CLI."""
+    raise SystemExit(dispatch(sys.argv[1:]))
 
 
 if __name__ == "__main__":

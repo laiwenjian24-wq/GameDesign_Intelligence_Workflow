@@ -41,6 +41,7 @@ test_output/
 # Generated knowledge-base artifacts
 knowledge_base/processed/
 knowledge_base/index/
+knowledge_base/llama_index/
 
 # Local scratch / temporary assets
 knowledge_base/test_assets/

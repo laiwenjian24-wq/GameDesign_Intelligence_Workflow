@@ -1,10 +1,13 @@
 # Core RAG framework
 llama-index
 
+# LlamaIndex BM25 retrieval support for local experimental retrieval.
+llama-index-retrievers-bm25
+rank-bm25
+
 # Local vector storage option for the first MVP
 chromadb
 
 # Utilities for future configuration and testing
 python-dotenv
 pytest
-
