@@ -77,6 +77,14 @@ def _node_text(node) -> str:
     return getattr(node, "text", "")
 
 
+def _node(text: str, metadata: Dict):
+    """Create a LlamaIndex TextNode when available, otherwise a fallback node."""
+    metadata = ensure_node_metadata(metadata)
+    if TextNode is not None:
+        return TextNode(text=text, metadata=metadata)
+    return SimpleNode(text=text, metadata=metadata)
+
+
 def create_documents_from_manifest(
     manifest_path: Path = DEFAULT_MANIFEST_PATH,
 ) -> List:
@@ -95,34 +103,106 @@ def create_documents_from_manifest(
     return documents
 
 
-def _fallback_markdown_chunks(text: str, chunk_size: int) -> List[str]:
-    """Split Markdown with heading awareness, then cap oversized chunks."""
-    sections = re.split(r"(?m)(?=^#{1,6}\s+)", text)
+def _markdown_sections(text: str) -> List[Dict]:
+    """Split Markdown into heading-aware sections with heading metadata."""
+    sections = []
+    heading_stack: List[tuple] = []
+    current_lines: List[str] = []
+    current_heading = ""
+    current_path: List[str] = []
+
+    def flush_current() -> None:
+        body = "\n".join(current_lines).strip()
+        if not body:
+            return
+        sections.append(
+            {
+                "text": body,
+                "heading": current_heading,
+                "heading_path": list(current_path),
+                "section_title": current_heading,
+            }
+        )
+
+    for line in text.splitlines():
+        match = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
+        if match:
+            flush_current()
+            level = len(match.group(1))
+            title = match.group(2).strip()
+            heading_stack = [
+                (existing_level, existing_title)
+                for existing_level, existing_title in heading_stack
+                if existing_level < level
+            ]
+            heading_stack.append((level, title))
+            current_heading = title
+            current_path = [title for _, title in heading_stack]
+            current_lines = [line]
+            continue
+
+        current_lines.append(line)
+
+    flush_current()
+    if not sections and text.strip():
+        return [
+            {
+                "text": text.strip(),
+                "heading": "",
+                "heading_path": [],
+                "section_title": "",
+            }
+        ]
+    return sections
+
+
+def _chunk_section(section: Dict, chunk_size: int) -> List[Dict]:
+    """Cap oversized Markdown sections without dropping heading metadata."""
+    text = section.get("text", "").strip()
+    if len(text) <= chunk_size:
+        return [section]
+
     chunks = []
-
-    for section in sections:
-        section = section.strip()
-        if not section:
+    paragraphs = re.split(r"\n\s*\n", text)
+    current = ""
+    for paragraph in paragraphs:
+        paragraph = paragraph.strip()
+        if not paragraph:
             continue
-        if len(section) <= chunk_size:
-            chunks.append(section)
-            continue
-
-        paragraphs = re.split(r"\n\s*\n", section)
-        current = ""
-        for paragraph in paragraphs:
-            paragraph = paragraph.strip()
-            if not paragraph:
-                continue
-            if current and len(current) + len(paragraph) + 2 > chunk_size:
-                chunks.append(current)
-                current = paragraph
-            else:
-                current = paragraph if not current else f"{current}\n\n{paragraph}"
-        if current:
-            chunks.append(current)
+        if current and len(current) + len(paragraph) + 2 > chunk_size:
+            chunk = dict(section)
+            chunk["text"] = current
+            chunks.append(chunk)
+            current = paragraph
+        else:
+            current = paragraph if not current else f"{current}\n\n{paragraph}"
+    if current:
+        chunk = dict(section)
+        chunk["text"] = current
+        chunks.append(chunk)
 
     return chunks
+
+
+def _is_markdown_document(document) -> bool:
+    """Return whether a document came from a Markdown source."""
+    metadata = getattr(document, "metadata", {}) or {}
+    path = metadata.get("file_path") or metadata.get("source_file", "")
+    return str(path).lower().endswith((".md", ".markdown"))
+
+
+def _section_nodes_from_document(document, chunk_size: int) -> List:
+    """Build heading-aware nodes from one Markdown document."""
+    base_metadata = ensure_node_metadata(getattr(document, "metadata", {}))
+    nodes = []
+    for section in _markdown_sections(_document_text(document)):
+        for chunk in _chunk_section(section, chunk_size):
+            metadata = dict(base_metadata)
+            metadata["heading"] = chunk.get("heading", "")
+            metadata["heading_path"] = chunk.get("heading_path", [])
+            metadata["section_title"] = chunk.get("section_title", "")
+            nodes.append(_node(chunk.get("text", ""), metadata))
+    return nodes
 
 
 def parse_documents_to_nodes(
@@ -132,18 +212,27 @@ def parse_documents_to_nodes(
 ) -> List:
     """Parse documents into nodes while preserving source metadata."""
     documents = list(documents)
+    markdown_nodes = []
+    other_documents = []
+    for document in documents:
+        if _is_markdown_document(document):
+            markdown_nodes.extend(_section_nodes_from_document(document, chunk_size))
+        else:
+            other_documents.append(document)
+
     if is_real_llamaindex_available():
         splitter = SentenceSplitter.from_defaults(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
         )
-        return splitter.get_nodes_from_documents(documents)
+        return markdown_nodes + splitter.get_nodes_from_documents(other_documents)
 
-    nodes = []
-    for document in documents:
+    nodes = list(markdown_nodes)
+    for document in other_documents:
         metadata = ensure_node_metadata(getattr(document, "metadata", {}))
-        for chunk in _fallback_markdown_chunks(_document_text(document), chunk_size):
-            nodes.append(SimpleNode(text=chunk, metadata=dict(metadata)))
+        for section in _markdown_sections(_document_text(document)):
+            for chunk in _chunk_section(section, chunk_size):
+                nodes.append(_node(chunk.get("text", ""), dict(metadata)))
     return nodes
 
 

@@ -58,6 +58,31 @@ def test_manifest_metadata_survives_into_llamaindex_nodes(tmp_path):
     assert nodes[0]["metadata"]["metadata_source"] == str(manifest_path)
 
 
+def test_markdown_heading_metadata(tmp_path):
+    source = _write_source(
+        tmp_path,
+        "characters.md",
+        "# Characters\n\n### Rin [Nexus-7仿生人]\nRin is a Nexus-7 android.",
+    )
+    manifest_path = _write_manifest(
+        tmp_path,
+        [_manifest_item(source, "canon", "character", ["Rin", "Nexus-7"])],
+    )
+
+    nodes = build_llamaindex_nodes(manifest_path, tmp_path / "llama_index")
+    rin_nodes = [
+        node for node in nodes
+        if node["metadata"].get("section_title") == "Rin [Nexus-7仿生人]"
+    ]
+
+    assert rin_nodes
+    assert rin_nodes[0]["metadata"]["heading"] == "Rin [Nexus-7仿生人]"
+    assert rin_nodes[0]["metadata"]["heading_path"] == [
+        "Characters",
+        "Rin [Nexus-7仿生人]",
+    ]
+
+
 def test_llamaindex_import_available_or_skip():
     if not is_real_llamaindex_available():
         pytest.skip(
@@ -138,4 +163,3 @@ def test_context_rag_rin_identity_uses_real_bm25_without_fallback(tmp_path):
     assert all(result["retrieval_mode"] == "bm25" for result in results)
     assert all(result["used_real_llamaindex"] is True for result in results)
     assert all(result["fallback"] is False for result in results)
-

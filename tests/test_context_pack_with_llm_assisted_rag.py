@@ -38,6 +38,30 @@ def test_llm_assisted_context_rin_identity_selects_canon(tmp_path):
     assert context_pack["missing_evidence"] == []
 
 
+def test_rin_identity_excerpt_contains_direct_identity(tmp_path):
+    if not is_real_bm25_available():
+        pytest.skip("Real LlamaIndex BM25 is required for this integration test.")
+    if not Path(DEFAULT_MANIFEST_PATH).exists():
+        pytest.skip("Project import_manifest.json is not available.")
+
+    index_dir = tmp_path / "llama_index"
+    build_llamaindex_nodes(DEFAULT_MANIFEST_PATH, index_dir)
+
+    context_pack = build_context_pack_with_llamaindex(
+        "Rin是什么身份？",
+        top_k=8,
+        index_dir=index_dir,
+        use_llm_assist=True,
+        llm_client=FakeLLMClient(),
+    )
+
+    excerpts = [item["excerpt"] for item in context_pack["canon_context"]]
+    assert any(
+        "Rin" in excerpt and ("Nexus-7" in excerpt or "仿生人" in excerpt)
+        for excerpt in excerpts
+    )
+
+
 def test_llm_assisted_context_keeps_status_separation(tmp_path):
     if not is_real_bm25_available():
         pytest.skip("Real LlamaIndex BM25 is required for this integration test.")
@@ -64,4 +88,3 @@ def test_llm_assisted_context_keeps_status_separation(tmp_path):
         item["status"] in {"draft", "deprecated", "inspiration"}
         for item in context_pack["canon_context"]
     )
-

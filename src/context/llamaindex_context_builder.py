@@ -47,6 +47,7 @@ def _build_missing_evidence(grouped: Dict[str, List[Dict]]) -> List[str]:
 def _build_missing_evidence_from_selection(selection) -> List[str]:
     """Build missing evidence warnings from an LLM evidence selection."""
     missing = []
+    missing.extend(selection.missing_evidence)
     for warning in selection.warnings:
         if warning == "insufficient canon evidence":
             missing.append(
