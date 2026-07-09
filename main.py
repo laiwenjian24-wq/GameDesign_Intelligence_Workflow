@@ -11,6 +11,10 @@ from src.context.context_builder import (
     build_context_pack,
     format_context_pack_markdown,
 )
+from src.context.full_context_builder import (
+    build_full_context_bundle,
+    format_full_context_bundle_markdown,
+)
 from src.context.llamaindex_context_builder import build_context_pack_with_llamaindex
 from src.llm.client import DeepSeekLLMClient, FakeLLMClient, LLMProviderError
 from src.rag.llamaindex_ingest import build_llamaindex_nodes
@@ -33,6 +37,7 @@ AVAILABLE_COMMANDS = [
     "ingest",
     "search",
     "context",
+    "context-full",
     "context-rag",
     "context-rag-llm",
     "check",
@@ -90,6 +95,21 @@ def run_context(task: str) -> None:
 
     context_pack = build_context_pack(task, INDEX_DIR, top_k=5)
     print(format_context_pack_markdown(context_pack))
+
+
+def _print_cli_text(text: str) -> None:
+    """Print text with a UTF-8 fallback for Windows non-UTF-8 consoles."""
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        sys.stdout.buffer.write(text.encode("utf-8", errors="replace"))
+        sys.stdout.buffer.write(b"\n")
+
+
+def run_context_full(question: str) -> None:
+    """Build and print a full-context bundle without calling an LLM."""
+    bundle = build_full_context_bundle(question)
+    _print_cli_text(format_full_context_bundle_markdown(bundle))
 
 
 def _append_rag_evidence(lines: List[str], citations: List[dict]) -> None:
@@ -279,6 +299,10 @@ def dispatch(argv: List[str]) -> int:
 
     if command == "context" and len(argv) >= 2:
         run_context(" ".join(argv[1:]))
+        return 0
+
+    if command == "context-full" and len(argv) >= 2:
+        run_context_full(" ".join(argv[1:]))
         return 0
 
     if command == "context-rag" and len(argv) >= 2:
