@@ -964,49 +964,90 @@ Notes:
 - identity/species alias
 - entity-value extraction
 
-## Q21
+## Smoke Test 01
 
 Question:
-Branch A中Mouse没有救Rin
+Rin是什么身份？
 
 Command:
-check
+context-rag-llm
+
+Result:
+PASS
+
+Retrieval:
+- retrieval_mode: bm25_llm_rewrite
+- used_real_llamaindex: True
+- fallback: False
+
+Intent:
+character_identity
+
+Canon Evidence:
+- STUPID游戏世界观设定集.md / Rin [Nexus-7仿生人]
+- 任务设计_风筝.md / 人物：Rin
+- 时间线.md / 第九章 — 风筝（鼠、Rin）
+
+Human Judgment:
+LLM-assisted retrieval correctly rewrites a short Chinese identity question into useful search queries. Context Pack retrieves direct canon identity evidence and preserves Canon/Draft/Deprecated separation.
+
+Issue:
+None
+
+Hardcoding Risk:
+Low for this specific case, but more non-Rin smoke tests are needed.
+
+## Smoke Test 02
+
+Question:
+Mouse过去是什么身份？
+
+Result:
+FAIL
+
+Category:
+Query Planning Failure
+
+Retrieval:
+PASS
+- LlamaIndex enabled
+- no fallback
+
+Problem:
+LLM query planner failed to identify character background question.
 
 Expected:
 
-Actual:
+intent:
+character_identity
 
-Retrieved Sources:
+entity:
+Mouse
 
-Result:
-
-Human Judgment:
-
-Issue:
-
-Notes:
-
-## Q22
-
-Question:
-Branch C中Rin最终存活
-
-Command:
-check
-
-Expected:
+rewritten_queries:
+- Mouse 身份
+- Mouse 背景
+- Mouse 过去
+- Mouse 抵抗组织
+- Mouse 飞行员
 
 Actual:
 
-Retrieved Sources:
+intent:
+unknown
 
-Result:
+rewritten_queries:
+- Mouse过去是什么身份？
 
-Human Judgment:
+Impact:
+Medium
 
-Issue:
+Hardcoding Risk:
+Low
 
-Notes:
+Suggested Fix:
+Expand query planner intent classification.
+Do not modify retrieval layer yet.
 
 ## Q23
 
