@@ -52,3 +52,28 @@ class EvidenceSelection:
             "warnings": self.warnings,
             "missing_evidence": self.missing_evidence,
         }
+
+
+@dataclass
+class QAAnswer:
+    """Structured grounded answer for narrative QA experiments."""
+
+    answer: str
+    confidence: str
+    canon_sources: List[str] = field(default_factory=list)
+    draft_notes: List[str] = field(default_factory=list)
+    deprecated_warnings: List[str] = field(default_factory=list)
+    missing_evidence: List[str] = field(default_factory=list)
+    limitations: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict:
+        """Return a JSON-serializable representation."""
+        return {
+            "answer": self.answer,
+            "confidence": self.confidence,
+            "canon_sources": list(self.canon_sources),
+            "draft_notes": list(self.draft_notes),
+            "deprecated_warnings": list(self.deprecated_warnings),
+            "missing_evidence": list(self.missing_evidence),
+            "limitations": list(self.limitations),
+        }

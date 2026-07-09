@@ -166,6 +166,8 @@ class DeepSeekLLMClient:
             messages = self._query_rewrite_messages(context.get("question", ""))
         elif task == "evidence_selection":
             messages = self._evidence_selection_messages(context)
+        elif task == "narrative_qa":
+            messages = self._narrative_qa_messages(context)
         else:
             messages = [
                 {
@@ -246,6 +248,42 @@ class DeepSeekLLMClient:
             },
         ]
 
+    def _narrative_qa_messages(self, context: Dict) -> list:
+        """Build messages for evidence-grounded narrative QA."""
+        payload = {
+            "mode": context.get("mode", ""),
+            "question": context.get("question", ""),
+            "context": context.get("context", {}),
+        }
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "You answer questions for a governed game narrative knowledge "
+                    "base. Return valid JSON only. Do not wrap in markdown. Do not "
+                    "include explanations outside JSON. Canon is the only source of "
+                    "current truth. Draft is reference only. Deprecated is historical "
+                    "or conflict evidence only and is not current truth. Inspiration "
+                    "is not fact. If canon evidence is missing, answer insufficient "
+                    "evidence. Cite source_file names and section_title when present. "
+                    "Return one JSON object with keys: answer, confidence, "
+                    "canon_sources, draft_notes, deprecated_warnings, "
+                    "missing_evidence, limitations. Example: "
+                    '{"answer":"Rin is a Nexus-7 android.","confidence":"high",'
+                    '"canon_sources":["story.md#Rin"],"draft_notes":[],'
+                    '"deprecated_warnings":[],"missing_evidence":[],"limitations":[]}'
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Return valid JSON only for this narrative QA task. "
+                    "Do not wrap in markdown.\n"
+                    + json.dumps(payload, ensure_ascii=False)
+                ),
+            },
+        ]
+
 
 class FakeLLMClient:
     """Deterministic local client for tests and offline CLI demos."""
@@ -275,6 +313,19 @@ class FakeLLMClient:
                         context.get("question", ""),
                         context.get("retrieval_plan", {}),
                         context.get("candidates", []),
+                    ),
+                    ensure_ascii=False,
+                ),
+                metadata={"provider": "fake"},
+            )
+
+        if task == "narrative_qa":
+            return LLMResponse(
+                text=json.dumps(
+                    self._qa_payload(
+                        context.get("question", ""),
+                        context.get("mode", ""),
+                        context.get("context", {}),
                     ),
                     ensure_ascii=False,
                 ),
@@ -411,3 +462,76 @@ class FakeLLMClient:
                 return "Canon text mentions Rin and Nexus-7."
 
         return ""
+
+    def _qa_payload(self, question: str, mode: str, qa_context: Dict) -> Dict:
+        """Return a deterministic grounded QA answer for offline tests."""
+        canon_items = qa_context.get("canon_context") or qa_context.get("canon") or []
+        draft_items = qa_context.get("draft_reference") or qa_context.get("draft") or []
+        deprecated_items = (
+            qa_context.get("deprecated_warnings") or qa_context.get("deprecated") or []
+        )
+
+        if not canon_items:
+            return {
+                "answer": "Insufficient canon evidence to answer this question.",
+                "confidence": "low",
+                "canon_sources": [],
+                "draft_notes": [],
+                "deprecated_warnings": [
+                    item.get("source_file", "") for item in deprecated_items
+                ],
+                "missing_evidence": ["No canon evidence available."],
+                "limitations": [
+                    "Draft, deprecated, and inspiration material cannot be used as current fact."
+                ],
+            }
+
+        canon_text = "\n".join(
+            str(item.get("text", "")) + "\n" + str(item.get("excerpt", ""))
+            for item in canon_items
+        )
+        canon_sources = [
+            self._qa_source_label(item)
+            for item in canon_items
+            if item.get("source_file", "")
+        ]
+        deprecated_sources = [
+            item.get("source_file", "") for item in deprecated_items if item.get("source_file")
+        ]
+        draft_sources = [
+            item.get("source_file", "") for item in draft_items if item.get("source_file")
+        ]
+
+        if "Rin" in question and ("Nexus-7" in canon_text or "android" in canon_text):
+            return {
+                "answer": "Rin is identified by canon evidence as a Nexus-7 android.",
+                "confidence": "high",
+                "canon_sources": canon_sources[:3],
+                "draft_notes": draft_sources[:3],
+                "deprecated_warnings": deprecated_sources[:3],
+                "missing_evidence": [],
+                "limitations": [
+                    "Answer is limited to the provided canon evidence."
+                ],
+            }
+
+        return {
+            "answer": "Canon evidence is present, but the fake provider cannot infer a reliable answer for this question.",
+            "confidence": "low",
+            "canon_sources": canon_sources[:3],
+            "draft_notes": draft_sources[:3],
+            "deprecated_warnings": deprecated_sources[:3],
+            "missing_evidence": ["Fake provider has no deterministic answer rule."],
+            "limitations": ["Use --provider deepseek for a manual broader-language test."],
+        }
+
+    def _qa_source_label(self, item: Dict) -> str:
+        """Return source label with section title when available."""
+        source_file = item.get("source_file", "")
+        section_title = item.get("section_title", "")
+        if not section_title:
+            metadata = item.get("metadata", {}) or {}
+            section_title = metadata.get("section_title") or metadata.get("heading", "")
+        if section_title:
+            return f"{source_file}#{section_title}"
+        return source_file

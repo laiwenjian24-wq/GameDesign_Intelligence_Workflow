@@ -17,6 +17,8 @@ from src.context.full_context_builder import (
 )
 from src.context.llamaindex_context_builder import build_context_pack_with_llamaindex
 from src.llm.client import DeepSeekLLMClient, FakeLLMClient, LLMProviderError
+from src.qa.answer_formatter import format_qa_report_markdown
+from src.qa.narrative_qa import answer_from_full_context, answer_from_rag_context_pack
 from src.rag.llamaindex_ingest import build_llamaindex_nodes
 from src.retrieval.index_builder import build_index
 from src.retrieval.query import query_knowledge_base
@@ -40,6 +42,8 @@ AVAILABLE_COMMANDS = [
     "context-full",
     "context-rag",
     "context-rag-llm",
+    "ask-full",
+    "ask-rag",
     "check",
 ]
 
@@ -270,6 +274,39 @@ def run_context_rag_llm(task: str, provider: str = "fake") -> None:
     print(format_llamaindex_context_report(context_pack))
 
 
+def run_ask_full(question: str, provider: str = "fake") -> None:
+    """Answer from a Full-context Bundle using the selected provider."""
+    llm_client = _llm_client_for_provider(provider)
+    bundle = build_full_context_bundle(question)
+    report = answer_from_full_context(
+        question,
+        bundle,
+        llm_client,
+        provider=provider,
+    )
+    _print_cli_text(format_qa_report_markdown(report))
+
+
+def run_ask_rag(question: str, provider: str = "fake") -> None:
+    """Answer from an LLM-assisted RAG Context Pack using the selected provider."""
+    build_llamaindex_nodes(index_dir=LLAMA_INDEX_DIR)
+    llm_client = _llm_client_for_provider(provider)
+    context_pack = build_context_pack_with_llamaindex(
+        question,
+        top_k=8,
+        index_dir=LLAMA_INDEX_DIR,
+        use_llm_assist=True,
+        llm_client=llm_client,
+    )
+    report = answer_from_rag_context_pack(
+        question,
+        context_pack,
+        llm_client,
+        provider=provider,
+    )
+    _print_cli_text(format_qa_report_markdown(report))
+
+
 def print_available_commands() -> None:
     """Print available CLI commands."""
     print("Available commands:")
@@ -315,6 +352,28 @@ def dispatch(argv: List[str]) -> int:
             if not task_args:
                 raise LLMProviderError("context-rag-llm requires a question.")
             run_context_rag_llm(" ".join(task_args), provider=provider)
+            return 0
+        except LLMProviderError as exc:
+            print(str(exc))
+            return 1
+
+    if command == "ask-full" and len(argv) >= 2:
+        try:
+            provider, task_args = _extract_provider(argv[1:])
+            if not task_args:
+                raise LLMProviderError("ask-full requires a question.")
+            run_ask_full(" ".join(task_args), provider=provider)
+            return 0
+        except LLMProviderError as exc:
+            print(str(exc))
+            return 1
+
+    if command == "ask-rag" and len(argv) >= 2:
+        try:
+            provider, task_args = _extract_provider(argv[1:])
+            if not task_args:
+                raise LLMProviderError("ask-rag requires a question.")
+            run_ask_rag(" ".join(task_args), provider=provider)
             return 0
         except LLMProviderError as exc:
             print(str(exc))
