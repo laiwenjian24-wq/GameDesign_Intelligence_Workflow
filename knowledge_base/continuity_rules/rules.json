@@ -1,0 +1,62 @@
+{
+  "version": "0.3.1",
+  "project": "STUPID",
+  "rules": [
+    {
+      "id": "stupid.rin.identity",
+      "enabled": true,
+      "state_type": "character_state",
+      "validation_type": "exclusive_value",
+      "scope": {
+        "type": "global",
+        "value": "global"
+      },
+      "entity": "Rin",
+      "attribute": "身份",
+      "canon_value": "Nexus-7",
+      "known_conflict_values": ["Nexus-6", "人类"],
+      "evidence_keywords": {
+        "task_any": ["身份", "型号", "仿生人"],
+        "canon_any": ["身份", "型号", "仿生人"],
+        "scope_any": []
+      },
+      "risk_level": "高",
+      "source": {
+        "preferred_sources": ["STUPID_CHARACTER_CANON.md"]
+      },
+      "resolution": {
+        "authority": "canon",
+        "action": "replace_task_value_with_canon_value",
+        "deprecated_policy": "explain_only"
+      }
+    },
+    {
+      "id": "stupid.branch_a.rin.leg_injury_side",
+      "enabled": true,
+      "state_type": "branch_state",
+      "validation_type": "known_conflict",
+      "scope": {
+        "type": "branch",
+        "value": "branch_a"
+      },
+      "entity": "Rin",
+      "attribute": "伤势位置",
+      "canon_value": "左腿",
+      "known_conflict_values": ["右腿"],
+      "evidence_keywords": {
+        "task_any": ["受伤", "换药", "包扎", "治疗", "伤"],
+        "canon_any": ["受伤", "擦伤", "擦过", "伤口", "负伤"],
+        "scope_any": ["Branch A", "branch_a", "A分支"]
+      },
+      "risk_level": "高",
+      "source": {
+        "preferred_sources": ["STUPID_BRANCH_A_CANON.md"]
+      },
+      "resolution": {
+        "authority": "canon",
+        "action": "replace_task_value_with_canon_value",
+        "deprecated_policy": "explain_only"
+      }
+    }
+  ]
+}

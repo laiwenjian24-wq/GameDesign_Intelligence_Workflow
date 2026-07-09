@@ -7,9 +7,14 @@ query -> retrieval -> context_builder -> Context Pack -> continuity report
 """
 
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from src.context.context_builder import build_context_pack
+from src.rules.continuity_rule_evaluator import (
+    evaluate_continuity_rules,
+    find_rule_evidence_gaps,
+)
+from src.rules.continuity_rule_loader import load_continuity_rules
 
 
 HIGH = "高"
@@ -17,98 +22,91 @@ MEDIUM = "中"
 LOW = "低"
 
 
-def _contains_all(text: str, keywords: List[str]) -> bool:
-    """Return True when all keywords are present in text."""
-    lowered = text.lower()
-    return all(keyword.lower() in lowered for keyword in keywords)
-
-
-def _citation_text(citation: Dict) -> str:
-    """Return searchable text from a Context Pack citation."""
-    return " ".join(
-        [
-            citation.get("source_file", ""),
-            citation.get("status", ""),
-            citation.get("summary", ""),
-            citation.get("excerpt", ""),
-            citation.get("reason_used", ""),
-        ]
+def _conflict_text(conflict: Dict) -> str:
+    """Build report text from a structured conflict object."""
+    entity = conflict.get("entity", "该对象")
+    attribute = conflict.get("attribute", "设定")
+    task_value = conflict.get("task_value", "输入值")
+    canon_value = conflict.get("canon_value", "Canon 值")
+    return (
+        f"输入使用 {entity} 的 {attribute} = {task_value}，"
+        f"但 Context Pack 中 Canon 指向 {attribute} = {canon_value}。"
     )
 
 
-def _find_rin_leg_conflict(context_pack: Dict) -> Dict:
-    """Detect the known Rin right-leg claim vs canon left-leg injury conflict.
+def _canon_interpretation(conflict: Dict) -> str:
+    """Build the Canon interpretation for report output."""
+    entity = conflict.get("entity", "该对象")
+    attribute = conflict.get("attribute", "设定")
+    canon_value = conflict.get("canon_value", "Canon 值")
+    return f"Final Decision 应采用 canon：{entity} 的 {attribute} = {canon_value}。"
 
-    Deprecated evidence is useful as an explanation of where the wrong version
-    may have come from, but it is not required to classify a Canon conflict as
-    high risk.
-    """
-    task = context_pack.get("task_context", {}).get("task", "")
-    mentions_rin_right_leg = _contains_all(task, ["rin", "右腿"])
-    mentions_care_context = any(
-        keyword in task for keyword in ["受伤", "换药", "包扎", "治疗", "伤"]
+
+def _deprecated_interpretation(conflict: Dict) -> str:
+    """Explain how Deprecated evidence is used for report output."""
+    deprecated_evidence = conflict.get("deprecated_evidence", [])
+    policy = conflict.get("resolution", {}).get("deprecated_policy", "explain_only")
+    if deprecated_evidence and policy == "explain_only":
+        return "Deprecated Evidence 仅作为旧版本 / 冲突来源解释，不能覆盖 Canon。"
+    return "未召回对应 Deprecated Evidence；但 Task claim 已与 Canon Evidence 冲突，因此仍判定为高风险。"
+
+
+def _rewrite_from_conflict(conflict: Dict) -> str:
+    """Build a generic rewrite suggestion from structured conflict metadata."""
+    entity = conflict.get("entity", "该对象")
+    attribute = conflict.get("attribute", "设定")
+    task_value = conflict.get("task_value", "输入值")
+    canon_value = conflict.get("canon_value", "Canon 值")
+    return f"将 {entity} 的 {attribute} 从 {task_value} 改为 {canon_value}。"
+
+
+def _final_decision_from_conflict(conflict: Dict) -> str:
+    """Build a generic final decision from structured conflict metadata."""
+    entity = conflict.get("entity", "该对象")
+    attribute = conflict.get("attribute", "设定")
+    canon_value = conflict.get("canon_value", "Canon 值")
+    task_value = conflict.get("task_value", "输入值")
+    return (
+        f"采用 canon：{entity} 的 {attribute} = {canon_value}。"
+        f"当前输入不可直接通过，应修改 {task_value} 为 {canon_value}。"
     )
 
-    if not (mentions_rin_right_leg and mentions_care_context):
-        return {}
 
-    canon_matches = []
-    for citation in context_pack.get("canon_context", []):
-        citation_text = _citation_text(citation)
-        has_rin_left_leg = _contains_all(citation_text, ["Rin", "左腿"])
-        has_injury_evidence = any(
-            keyword in citation_text
-            for keyword in ["受伤", "擦伤", "擦过", "伤口", "负伤"]
-        )
-        if has_rin_left_leg and has_injury_evidence:
-            canon_matches.append(citation)
-
-    deprecated_matches = list(context_pack.get("deprecated_warnings", []))
-
-    if not canon_matches:
-        return {}
-
-    if deprecated_matches:
-        deprecated_interpretation = "Deprecated Evidence 仅作为旧版本 / 冲突来源解释，不能覆盖 Canon。"
-    else:
-        deprecated_interpretation = "未召回对应 Deprecated Evidence；但 Task claim 已与 Canon Evidence 冲突，因此仍判定为高风险。"
-
-    return {
-        "risk_level": HIGH,
-        "conflict": "输入使用 Rin 右腿受伤 / 换药，但 Context Pack 中 Canon 指向 Rin 左腿受伤 / 擦伤。",
-        "canon_interpretation": "Final Decision 应采用 canon：Rin 左腿受伤 / 擦伤。",
-        "deprecated_interpretation": deprecated_interpretation,
-        "rewrite_suggestion": "Mouse 在安全屋里给 Rin 的左腿换药。",
-        "canon_evidence": canon_matches,
-        "deprecated_evidence": deprecated_matches,
-    }
+def _format_conflict(raw_conflict: Dict) -> Dict:
+    """Add report-facing text fields without changing rule matching output."""
+    conflict = dict(raw_conflict)
+    conflict["conflict"] = _conflict_text(conflict)
+    conflict["canon_interpretation"] = _canon_interpretation(conflict)
+    conflict["deprecated_interpretation"] = _deprecated_interpretation(conflict)
+    conflict["rewrite_suggestion"] = _rewrite_from_conflict(conflict)
+    return conflict
 
 
-def _build_conflict_analysis(context_pack: Dict) -> List[Dict]:
+def _build_conflict_analysis(
+    context_pack: Dict, rule_path: Optional[Path] = None
+) -> List[Dict]:
     """Run rule-based conflict checks over a Context Pack."""
-    conflicts = []
-    rin_leg_conflict = _find_rin_leg_conflict(context_pack)
-    if rin_leg_conflict:
-        conflicts.append(rin_leg_conflict)
-    return conflicts
+    rules = load_continuity_rules(rule_path)
+    return [
+        _format_conflict(conflict)
+        for conflict in evaluate_continuity_rules(context_pack, rules)
+    ]
 
 
-def _build_missing_evidence(context_pack: Dict, conflicts: List[Dict]) -> List[str]:
+def _build_missing_evidence(
+    context_pack: Dict, conflicts: List[Dict], rules: List[Dict]
+) -> List[str]:
     """Combine Context Pack missing evidence with check-specific gaps."""
     missing = list(context_pack.get("missing_evidence", []))
 
-    task = context_pack.get("task_context", {}).get("task", "")
-    if "Rin" in task and "受伤" in task and not context_pack.get("canon_context"):
-        missing.append("任务涉及 Rin 伤势，但 Context Pack 中缺少 Canon Evidence。")
-
-    if conflicts:
-        return missing
-
-    if _contains_all(task, ["rin", "右腿"]) and not context_pack.get(
-        "deprecated_warnings"
-    ):
-        missing.append("任务提到 Rin 右腿，但 Context Pack 中没有检索到对应旧设定或 Canon 依据，需要人工确认。")
-
+    for gap in find_rule_evidence_gaps(context_pack, rules):
+        entity = gap.get("entity", "该对象")
+        attribute = gap.get("attribute", "设定")
+        task_value = gap.get("task_value") or "未识别值"
+        missing.append(
+            f"任务涉及 {entity} 的 {attribute} = {task_value}，"
+            "但 Context Pack 中缺少对应 Canon Evidence，需要人工确认。"
+        )
     return missing
 
 
@@ -124,7 +122,7 @@ def _risk_level(conflicts: List[Dict], missing_evidence: List[str]) -> str:
 def _final_decision(risk_level: str, conflicts: List[Dict]) -> str:
     """Build final decision from Context Pack analysis."""
     if risk_level == HIGH and conflicts:
-        return "采用 canon：Rin 左腿受伤。当前输入不可直接通过，应修改右腿为左腿。"
+        return _final_decision_from_conflict(conflicts[0])
     if risk_level == MEDIUM:
         return "证据不足，暂缓通过；需要补充 Canon Evidence 或人工确认。"
     return "未发现明确 Canon 冲突，可暂时通过，但正式入库前仍建议人工复核。"
@@ -139,11 +137,20 @@ def _rewrite_suggestion(conflicts: List[Dict]) -> str:
     return "暂无必须改写项。"
 
 
-def run_continuity_check(input_text: str, index_dir: Path, top_k: int = 5) -> Dict:
+def run_continuity_check(
+    input_text: str,
+    index_dir: Path,
+    top_k: int = 5,
+    rule_path: Optional[Path] = None,
+) -> Dict:
     """Build Context Pack first, then run continuity checks from it."""
     context_pack = build_context_pack(input_text, index_dir, top_k=top_k)
-    conflicts = _build_conflict_analysis(context_pack)
-    missing_evidence = _build_missing_evidence(context_pack, conflicts)
+    rules = load_continuity_rules(rule_path)
+    conflicts = [
+        _format_conflict(conflict)
+        for conflict in evaluate_continuity_rules(context_pack, rules)
+    ]
+    missing_evidence = _build_missing_evidence(context_pack, conflicts, rules)
     risk_level = _risk_level(conflicts, missing_evidence)
 
     return {
