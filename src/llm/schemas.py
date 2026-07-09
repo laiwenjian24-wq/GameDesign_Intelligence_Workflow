@@ -39,6 +39,7 @@ class EvidenceSelection:
     selected_inspiration: List[Dict] = field(default_factory=list)
     rejected: List[Dict] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
+    missing_evidence: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict:
         """Return a JSON-serializable representation."""
@@ -49,5 +50,5 @@ class EvidenceSelection:
             "selected_inspiration": self.selected_inspiration,
             "rejected": self.rejected,
             "warnings": self.warnings,
+            "missing_evidence": self.missing_evidence,
         }
-

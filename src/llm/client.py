@@ -6,7 +6,11 @@ import time. Concrete providers should be wired by application code or tests.
 
 from dataclasses import dataclass
 import json
+import os
+import re
+from typing import Any
 from typing import Dict, Optional, Protocol
+from urllib import error, request
 
 
 @dataclass
@@ -28,6 +32,45 @@ class LLMClient(Protocol):
         """Return one completion for a prompt and optional Context Pack."""
 
 
+class LLMProviderError(RuntimeError):
+    """Clear provider error suitable for CLI display."""
+
+
+def _sanitize_response_preview(content: str, limit: int = 300) -> str:
+    """Return a short response preview safe for error messages."""
+    compact = re.sub(r"\s+", " ", content or "").strip()
+    return compact[:limit]
+
+
+def parse_json_object_from_content(content: str) -> Dict:
+    """Parse a JSON object from raw or fenced LLM content."""
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError:
+        payload = None
+    if isinstance(payload, dict):
+        return payload
+
+    fence_match = re.search(
+        r"```(?:json)?\s*(\{.*?\})\s*```",
+        content or "",
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if fence_match:
+        try:
+            payload = json.loads(fence_match.group(1))
+        except json.JSONDecodeError:
+            payload = None
+        if isinstance(payload, dict):
+            return payload
+
+    preview = _sanitize_response_preview(content)
+    raise LLMProviderError(
+        "DeepSeek response was not valid JSON. "
+        f"Sanitized response preview: {preview}"
+    )
+
+
 class UnconfiguredLLMClient:
     """Placeholder client used when no real provider has been configured."""
 
@@ -41,6 +84,167 @@ class UnconfiguredLLMClient:
             "No LLM provider configured. Configure a DeepSeek-compatible "
             "client in the next Narrative QA layer before calling complete()."
         )
+
+
+class DeepSeekLLMClient:
+    """DeepSeek chat client for retrieval planning and evidence selection only."""
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        base_url: str = "https://api.deepseek.com",
+        model: str = "deepseek-chat",
+    ) -> None:
+        self.api_key = api_key or os.environ.get("DEEPSEEK_API_KEY", "")
+        if not self.api_key:
+            raise LLMProviderError(
+                "DEEPSEEK_API_KEY is not set. Set it in the environment before "
+                "using --provider deepseek."
+            )
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+
+    def chat(
+        self,
+        messages: list,
+        temperature: float = 0.1,
+        max_tokens: int = 2048,
+        require_json: bool = True,
+    ) -> str:
+        """Call DeepSeek chat completion and return assistant content."""
+        payload: Dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if require_json:
+            payload["response_format"] = {"type": "json_object"}
+
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        req = request.Request(
+            f"{self.base_url}/chat/completions",
+            data=body,
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
+        try:
+            with request.urlopen(req, timeout=60) as response:
+                response_payload = json.loads(response.read().decode("utf-8"))
+        except error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise LLMProviderError(f"DeepSeek API HTTP error: {exc.code}; {detail}") from exc
+        except (error.URLError, TimeoutError) as exc:
+            raise LLMProviderError(f"DeepSeek API request failed: {exc}") from exc
+        except json.JSONDecodeError as exc:
+            raise LLMProviderError("DeepSeek API returned invalid JSON.") from exc
+
+        try:
+            content = response_payload["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise LLMProviderError(
+                "DeepSeek API response did not contain choices[0].message.content."
+            ) from exc
+
+        if require_json:
+            parse_json_object_from_content(content)
+        return content
+
+    def complete(
+        self,
+        prompt: str,
+        context: Optional[Dict] = None,
+    ) -> LLMResponse:
+        """Return structured JSON for query rewrite or evidence selection."""
+        context = context or {}
+        task = context.get("task", "")
+        if task == "query_rewrite":
+            messages = self._query_rewrite_messages(context.get("question", ""))
+        elif task == "evidence_selection":
+            messages = self._evidence_selection_messages(context)
+        else:
+            messages = [
+                {
+                    "role": "system",
+                    "content": "Return a JSON object only.",
+                },
+                {"role": "user", "content": prompt},
+            ]
+
+        content = self.chat(messages, temperature=0.0, max_tokens=4096, require_json=True)
+        return LLMResponse(text=content, metadata={"provider": "deepseek"})
+
+    def _query_rewrite_messages(self, question: str) -> list:
+        """Build messages for retrieval-only query planning."""
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "You are a retrieval planner for a game narrative knowledge base. "
+                    "Do not answer the user question. Return valid JSON only. "
+                    "Do not wrap in markdown. Do not include explanations. "
+                    "Return one JSON object with keys: "
+                    "original_question, intent, entities, rewritten_queries, "
+                    "preferred_source_types, forbidden_fact_statuses, confidence. "
+                    "Use concise Chinese and English search phrases where useful. "
+                    "forbidden_fact_statuses must include draft, deprecated, inspiration "
+                    "for fact questions. Example: "
+                    '{"original_question":"Rin是什么身份？","intent":"character_identity",'
+                    '"entities":["Rin"],"rewritten_queries":["Rin 身份 角色设定",'
+                    '"Rin Nexus-7 仿生人"],"preferred_source_types":["character",'
+                    '"worldbuilding"],"forbidden_fact_statuses":["draft","deprecated",'
+                    '"inspiration"],"confidence":"high"}'
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Return valid JSON only for this question. Do not wrap in markdown. "
+                    f"Question: {question}"
+                ),
+            },
+        ]
+
+    def _evidence_selection_messages(self, context: Dict) -> list:
+        """Build messages for status-preserving evidence selection."""
+        payload = {
+            "question": context.get("question", ""),
+            "retrieval_plan": context.get("retrieval_plan", {}),
+            "candidates": context.get("candidates", []),
+        }
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "You select evidence for a Context Pack. Do not answer the "
+                    "question. Return valid JSON only. Do not wrap in markdown. "
+                    "Do not include explanations. Return candidate_id values only. "
+                    "Do not return full text, markdown excerpts, or explanations. "
+                    "Preserve every candidate status exactly. Never put draft, "
+                    "deprecated, or inspiration evidence into selected_canon_ids. "
+                    "If no canon candidate supports the fact, include warning "
+                    "'insufficient canon evidence'. Return one JSON object with keys: "
+                    "selected_canon_ids, selected_draft_ids, selected_deprecated_ids, "
+                    "selected_inspiration_ids, rejected_ids, warnings, missing_evidence. "
+                    "Example: "
+                    '{"selected_canon_ids":["c001"],"selected_draft_ids":[],'
+                    '"selected_deprecated_ids":[],"selected_inspiration_ids":[],'
+                    '"rejected_ids":["c002"],"warnings":[],"missing_evidence":[]}'
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Return valid JSON only for this evidence selection task. "
+                    "Do not wrap in markdown.\n"
+                    + json.dumps(payload, ensure_ascii=False)
+                ),
+            },
+        ]
 
 
 class FakeLLMClient:
@@ -143,51 +347,45 @@ class FakeLLMClient:
         candidates: list,
     ) -> Dict:
         """Select status-preserving evidence from candidates."""
-        selected_canon = []
-        selected_draft = []
-        selected_deprecated = []
-        selected_inspiration = []
-        rejected = []
+        selected_canon_ids = []
+        selected_draft_ids = []
+        selected_deprecated_ids = []
+        selected_inspiration_ids = []
+        rejected_ids = []
         warnings = []
+        missing_evidence = []
 
         for candidate in candidates:
             status = candidate.get("status", "unknown")
-            source_file = candidate.get("source_file", "")
-            text = candidate.get("text", "")
+            candidate_id = candidate.get("candidate_id", "")
             reason = self._selection_reason(question, retrieval_plan, candidate)
-            enriched = dict(candidate)
-            enriched["selection_reason"] = reason
 
             if status == "canon" and reason:
-                selected_canon.append(enriched)
+                selected_canon_ids.append(candidate_id)
             elif status == "draft":
-                selected_draft.append(enriched)
+                selected_draft_ids.append(candidate_id)
             elif status == "deprecated":
-                selected_deprecated.append(enriched)
+                selected_deprecated_ids.append(candidate_id)
             elif status == "inspiration":
-                selected_inspiration.append(enriched)
+                selected_inspiration_ids.append(candidate_id)
             else:
-                rejected.append(
-                    {
-                        "source_file": source_file,
-                        "status": status,
-                        "reason": "Not selected as grounded evidence.",
-                    }
-                )
+                rejected_ids.append(candidate_id)
 
-            if len(selected_canon) >= 3:
+            if len(selected_canon_ids) >= 3:
                 break
 
-        if not selected_canon:
+        if not selected_canon_ids:
             warnings.append("insufficient canon evidence")
+            missing_evidence.append("no canon evidence selected")
 
         return {
-            "selected_canon": selected_canon,
-            "selected_draft": selected_draft,
-            "selected_deprecated": selected_deprecated,
-            "selected_inspiration": selected_inspiration,
-            "rejected": rejected,
+            "selected_canon_ids": selected_canon_ids,
+            "selected_draft_ids": selected_draft_ids,
+            "selected_deprecated_ids": selected_deprecated_ids,
+            "selected_inspiration_ids": selected_inspiration_ids,
+            "rejected_ids": rejected_ids,
             "warnings": warnings,
+            "missing_evidence": missing_evidence,
         }
 
     def _selection_reason(
@@ -198,20 +396,18 @@ class FakeLLMClient:
     ) -> str:
         """Return a reason when a candidate matches the fake selection policy."""
         source_file = candidate.get("source_file", "")
-        text = candidate.get("text", "")
+        excerpt = candidate.get("excerpt", "")
         status = candidate.get("status", "unknown")
         if status != "canon":
             return ""
 
         if retrieval_plan.get("intent") == "character_identity":
-            preferred_sources = (
-                "故事大纲与角色设定",
-                "STUPID游戏世界观设定集",
-                "世界观概述",
-            )
-            if any(name in source_file for name in preferred_sources):
-                return "Canon character/world source selected for Rin identity."
-            if "Nexus-7" in text and "Rin" in text:
+            heading = candidate.get("heading", "") or candidate.get("section_title", "")
+            if "Rin" in heading and (
+                "Nexus-7" in heading or "仿生人" in heading or "身份" in heading
+            ):
+                return "Canon character identity section selected for Rin."
+            if "Nexus-7" in excerpt and "Rin" in excerpt:
                 return "Canon text mentions Rin and Nexus-7."
 
         return ""

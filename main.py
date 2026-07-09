@@ -12,7 +12,7 @@ from src.context.context_builder import (
     format_context_pack_markdown,
 )
 from src.context.llamaindex_context_builder import build_context_pack_with_llamaindex
-from src.llm.client import FakeLLMClient
+from src.llm.client import DeepSeekLLMClient, FakeLLMClient, LLMProviderError
 from src.rag.llamaindex_ingest import build_llamaindex_nodes
 from src.retrieval.index_builder import build_index
 from src.retrieval.query import query_knowledge_base
@@ -99,9 +99,14 @@ def _append_rag_evidence(lines: List[str], citations: List[dict]) -> None:
         return
 
     for citation in citations:
+        metadata = citation.get("metadata", {})
         lines.append(f"- source_file: {citation.get('source_file', '')}")
         lines.append(f"  - status: {citation.get('status', 'unknown')}")
         lines.append(f"  - score: {citation.get('score', 0)}")
+        if metadata.get("heading"):
+            lines.append(f"  - heading: {metadata.get('heading', '')}")
+        if metadata.get("section_title"):
+            lines.append(f"  - section_title: {metadata.get('section_title', '')}")
         lines.append(f"  - retrieval_mode: {citation.get('retrieval_mode', 'unknown')}")
         lines.append(
             f"  - used_real_llamaindex: {citation.get('used_real_llamaindex', False)}"
@@ -202,15 +207,45 @@ def run_context_rag(task: str) -> None:
     print(format_llamaindex_context_report(context_pack))
 
 
-def run_context_rag_llm(task: str) -> None:
+def _llm_client_for_provider(provider: str):
+    """Return the configured LLM client for a CLI provider name."""
+    if provider == "fake":
+        return FakeLLMClient()
+    if provider == "deepseek":
+        return DeepSeekLLMClient()
+    raise LLMProviderError(
+        f"Unknown LLM provider: {provider}. Available providers: fake, deepseek."
+    )
+
+
+def _extract_provider(args: List[str]) -> tuple:
+    """Extract --provider from command arguments."""
+    provider = "fake"
+    remaining = []
+    index = 0
+    while index < len(args):
+        item = args[index]
+        if item == "--provider":
+            if index + 1 >= len(args):
+                raise LLMProviderError("--provider requires a value: fake or deepseek.")
+            provider = args[index + 1]
+            index += 2
+            continue
+        remaining.append(item)
+        index += 1
+    return provider, remaining
+
+
+def run_context_rag_llm(task: str, provider: str = "fake") -> None:
     """Build and print an LLM-assisted LlamaIndex Context Pack."""
     build_llamaindex_nodes(index_dir=LLAMA_INDEX_DIR)
+    llm_client = _llm_client_for_provider(provider)
     context_pack = build_context_pack_with_llamaindex(
         task,
         top_k=8,
         index_dir=LLAMA_INDEX_DIR,
         use_llm_assist=True,
-        llm_client=FakeLLMClient(),
+        llm_client=llm_client,
     )
     print(format_llamaindex_context_report(context_pack))
 
@@ -251,8 +286,15 @@ def dispatch(argv: List[str]) -> int:
         return 0
 
     if command == "context-rag-llm" and len(argv) >= 2:
-        run_context_rag_llm(" ".join(argv[1:]))
-        return 0
+        try:
+            provider, task_args = _extract_provider(argv[1:])
+            if not task_args:
+                raise LLMProviderError("context-rag-llm requires a question.")
+            run_context_rag_llm(" ".join(task_args), provider=provider)
+            return 0
+        except LLMProviderError as exc:
+            print(str(exc))
+            return 1
 
     print(f"Unknown command: {command}")
     print_available_commands()

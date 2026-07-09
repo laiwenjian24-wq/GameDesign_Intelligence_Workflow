@@ -1,8 +1,8 @@
 """LLM-assisted query rewriting for LlamaIndex retrieval."""
 
-import json
 from typing import Dict
 
+from src.llm.client import parse_json_object_from_content
 from src.llm.schemas import RetrievalPlan
 
 
@@ -31,9 +31,5 @@ def rewrite_query_for_retrieval(question: str, llm_client) -> RetrievalPlan:
         "Rewrite the narrative question into retrieval queries only.",
         context={"task": "query_rewrite", "question": question},
     )
-    try:
-        payload = json.loads(response.text)
-    except json.JSONDecodeError:
-        payload = {}
+    payload = parse_json_object_from_content(response.text)
     return _plan_from_payload(question, payload)
-
