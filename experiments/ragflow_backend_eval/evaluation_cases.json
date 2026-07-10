@@ -1,0 +1,56 @@
+[
+  {
+    "case_id": "ragflow_canon_qa_rin_identity",
+    "question": "Rin是什么身份？",
+    "expected_task_type": "canon_qa",
+    "expected_evidence": "Canon evidence identifying Rin's current identity/status.",
+    "required_file_types": ["md"],
+    "required_status_policy": "Only Canon can answer as current truth. Draft/Deprecated/Inspiration must not be factual evidence.",
+    "notes": "Tests basic Canon QA retrieval from Markdown."
+  },
+  {
+    "case_id": "ragflow_branch_b_rin_injury",
+    "question": "Branch B中Rin哪条腿受伤？",
+    "expected_task_type": "continuity_check",
+    "expected_evidence": "Branch B Canon evidence for Rin's injury side/state.",
+    "required_file_types": ["md", "pdf"],
+    "required_status_policy": "Deprecated wound-state evidence must not override Canon.",
+    "notes": "Tests branch-state evidence and deprecated contamination risk."
+  },
+  {
+    "case_id": "ragflow_branch_b_mouse_injury",
+    "question": "Mouse在Branch B的伤势是什么？",
+    "expected_task_type": "continuity_check",
+    "expected_evidence": "Canon evidence for Mouse's Branch B wound state.",
+    "required_file_types": ["md"],
+    "required_status_policy": "Canon evidence required for current wound state.",
+    "notes": "Tests relationship between branch state and character state."
+  },
+  {
+    "case_id": "ragflow_mombasa_scene_function",
+    "question": "Mombasa安全屋场景功能是什么？",
+    "expected_task_type": "story_brief",
+    "expected_evidence": "Scene or visual mapping evidence describing Mombasa safehouse function.",
+    "required_file_types": ["md", "docx", "pptx"],
+    "required_status_policy": "Draft can be reference only; Canon needed for production constraints.",
+    "notes": "Tests whether retrieval can support scene-function reasoning."
+  },
+  {
+    "case_id": "ragflow_right_leg_deprecated_current_canon",
+    "question": "右腿受伤设定能不能作为当前 Canon？",
+    "expected_task_type": "continuity_check",
+    "expected_evidence": "Canon wound-state evidence plus any Deprecated old-draft conflict evidence.",
+    "required_file_types": ["md"],
+    "required_status_policy": "Deprecated evidence can explain conflict but cannot become current truth.",
+    "notes": "Tests deprecated contamination detection."
+  },
+  {
+    "case_id": "ragflow_branch_b_bandaging_cg_prompt",
+    "question": "Branch B 互相包扎 CG prompt 需要哪些 continuity constraints？",
+    "expected_task_type": "art_prompt",
+    "expected_evidence": "Canon visual/branch/scene evidence for mutual bandaging constraints.",
+    "required_file_types": ["md", "image"],
+    "required_status_policy": "Prompt brief must cite Canon constraints and mark missing visual evidence.",
+    "notes": "Tests prompt brief support from visual and branch evidence."
+  }
+]
