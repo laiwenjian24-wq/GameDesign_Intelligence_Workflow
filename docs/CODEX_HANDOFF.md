@@ -24,6 +24,8 @@ The project has implemented:
 - Experimental answer comparison through `ask-full` and `ask-rag`.
 - Canon / Draft / Deprecated / Inspiration separation remains intact.
 - Context Pack remains the governance core.
+- `docs/V1_NARRATIVE_INTELLIGENCE_ARCHITECTURE.md` has been created.
+- The v1 project direction has been formally written down.
 
 Most recent test result:
 
@@ -32,7 +34,7 @@ Most recent test result:
 Current direction:
 
 - Do not continue adding one-off patches for single failed examples such as Rain / Second Foundation.
-- The next stage should move toward v1 Narrative Intelligence Workflow architecture redesign.
+- Move from v0.4 RAG experiments toward the v1 Narrative Intelligence Workflow architecture.
 
 ## Key Decision
 
@@ -55,6 +57,7 @@ The core product value is not only retrieval. It is structured narrative governa
 
 Core v1 direction:
 
+- v1 is explicitly positioned as a Canon-aware Narrative Intelligence Workflow / Workbench.
 - Natural language unified entry point:
   - `main.py chat "..."`
 - Docling-based multi-format document parsing.
@@ -66,7 +69,9 @@ Core v1 direction:
 - Tiered Continuity Check.
 - Evaluation Benchmark.
 
-The v1 design should treat RAG as one infrastructure layer, not as the whole product.
+The user-facing entry point should be natural language through `main.py chat "..."`.
+
+RAG, GraphRAG, Docling, and LLM providers are infrastructure layers. They are not the product itself. The product is canon-aware narrative governance and production workflow support.
 
 ## MVP Scope
 
@@ -94,11 +99,8 @@ Phase 2 should handle:
 
 ## Recommended Next Step
 
-Continue refining:
-
-- `docs/V1_NARRATIVE_INTELLIGENCE_ARCHITECTURE.md`
-
-Then either:
-
-1. Create a new v1 branch, or
-2. Start a Phase 1 ingestion experiment.
+- Create a new `feature/v1-narrative-intelligence-workflow` branch.
+- Phase 2 should prioritize a Docling ingestion experiment.
+- Do not continue adding single-example patches on `feature/v0.4-llm-assisted-rag`.
+- Do not immediately implement GraphRAG as the mainline backend.
+- Keep GraphRAG as a parallel experiment for relationship and timeline reasoning.
