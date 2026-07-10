@@ -29,7 +29,8 @@ from src.workflows.continuity_checker import (
 from src.workflows.ingest_workflow import run_ingestion_workflow
 from src.v1.chat.daily_assistant import run_daily_assistant
 from src.v1.ingestion.lite_document_loader import available_parsers
-from src.v1.kb.lite_index import build_lite_index, save_lite_index
+from src.v1.ingestion.manifest_status_resolver import inspect_manifest
+from src.v1.kb.lite_index import build_lite_index, build_lite_index_from_manifest, save_lite_index
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -49,6 +50,7 @@ AVAILABLE_COMMANDS = [
     "ask-rag",
     "chat",
     "ingest-lite",
+    "manifest-doctor",
     "check",
 ]
 
@@ -358,6 +360,7 @@ def _parse_ingest_lite_args(args: List[str]) -> dict:
         "input": ["knowledge_base"],
         "output": "processed/v1_lite_kb.json",
         "manifest": "knowledge_base/import_manifest.json",
+        "from_manifest": "",
         "include_ext": [".md", ".docx", ".pdf", ".txt"],
     }
     index = 0
@@ -375,6 +378,10 @@ def _parse_ingest_lite_args(args: List[str]) -> dict:
             options["manifest"] = args[index + 1]
             index += 2
             continue
+        if item == "--from-manifest":
+            options["from_manifest"] = args[index + 1]
+            index += 2
+            continue
         if item == "--include-ext":
             options["include_ext"] = [
                 ext.strip() for ext in args[index + 1].split(",") if ext.strip()
@@ -388,11 +395,17 @@ def _parse_ingest_lite_args(args: List[str]) -> dict:
 def run_ingest_lite(args: List[str]) -> None:
     """Build the v1 Lite KB JSON index."""
     options = _parse_ingest_lite_args(args)
-    kb = build_lite_index(
-        options["input"],
-        manifest_path=options["manifest"],
-        include_ext=options["include_ext"],
-    )
+    if options["from_manifest"]:
+        kb = build_lite_index_from_manifest(
+            options["from_manifest"],
+            include_ext=options["include_ext"],
+        )
+    else:
+        kb = build_lite_index(
+            options["input"],
+            manifest_path=options["manifest"],
+            include_ext=options["include_ext"],
+        )
     output_path = save_lite_index(kb, options["output"])
     parsers = available_parsers()
     print("v1 Lite KB ingestion completed.")
@@ -400,6 +413,46 @@ def run_ingest_lite(args: List[str]) -> None:
     print(f"Skipped files: {kb.metadata.get('skipped_file_count', 0)}")
     print(f"Blocks: {len(kb.blocks)}")
     print(f"Status counts: {kb.status_counts}")
+    diagnostics = kb.metadata.get("manifest_status_diagnostics", {})
+    if diagnostics:
+        print(f"Manifest path: {diagnostics.get('manifest_path', '')}")
+        print(f"Manifest entries loaded: {diagnostics.get('manifest_entries_loaded', 0)}")
+        print(f"Files matched by status: {diagnostics.get('matched_file_count', 0)}")
+        print(f"Files unmatched: {diagnostics.get('unmatched_file_count', 0)}")
+        print(f"Ambiguous matches: {diagnostics.get('ambiguous_file_count', 0)}")
+        matched_files = diagnostics.get("matched_files", [])
+        unmatched_files = diagnostics.get("unmatched_files", [])
+        ambiguous_files = diagnostics.get("ambiguous_files", [])
+        if matched_files:
+            print("Sample matched files:")
+            for item in matched_files[:5]:
+                print(
+                    f"- {item.get('source_file', '')}: {item.get('status', 'unknown')} "
+                    f"({item.get('method', '')})"
+                )
+        if unmatched_files:
+            print("Sample unmatched files:")
+            for item in unmatched_files[:5]:
+                print(f"- {item.get('source_file', '')}: {item.get('reason', '')}")
+        if ambiguous_files:
+            print("Sample ambiguous files:")
+            for item in ambiguous_files[:5]:
+                print(f"- {item.get('source_file', '')}: {item.get('reason', '')}")
+    manifest_driven = kb.metadata.get("manifest_driven_ingest", {})
+    if manifest_driven.get("enabled"):
+        print("Manifest-driven ingest: enabled")
+        print(f"Manifest entries loaded: {manifest_driven.get('entries_loaded', 0)}")
+        print(f"Manifest files existing: {manifest_driven.get('files_existing', 0)}")
+        print(f"Manifest files missing: {manifest_driven.get('files_missing', 0)}")
+        print(f"Manifest files loaded: {manifest_driven.get('files_loaded', 0)}")
+        print(f"Suspected mojibake paths: {manifest_driven.get('suspected_mojibake_count', 0)}")
+        missing_files = manifest_driven.get("missing_files", [])
+        if missing_files:
+            print("Sample missing manifest files:")
+            for item in missing_files[:5]:
+                print(f"- {item.get('path', '')} -> {item.get('resolved_path', '')}")
+        if manifest_driven.get("entries_loaded", 0) and not manifest_driven.get("files_existing", 0):
+            print("No manifest files exist on disk. Check manifest path encoding or source file locations.")
     print(f"Parser availability: {parsers}")
     warnings = kb.metadata.get("warnings", [])
     if warnings:
@@ -407,6 +460,63 @@ def run_ingest_lite(args: List[str]) -> None:
         for warning in warnings[:20]:
             print(f"- {warning}")
     print(f"Output path: {output_path}")
+
+
+def _parse_manifest_doctor_args(args: List[str]) -> str:
+    manifest = "knowledge_base/import_manifest.json"
+    index = 0
+    while index < len(args):
+        if args[index] == "--manifest" and index + 1 < len(args):
+            manifest = args[index + 1]
+            index += 2
+            continue
+        index += 1
+    return manifest
+
+
+def run_manifest_doctor(args: List[str]) -> None:
+    """Print import_manifest path, status, existence, and encoding diagnostics."""
+    manifest = _parse_manifest_doctor_args(args)
+    report = inspect_manifest(manifest)
+    print("v1 Lite KB manifest doctor")
+    print(f"Manifest path: {report.get('manifest_path', '')}")
+    print(f"Manifest entries loaded: {report.get('manifest_entries_loaded', 0)}")
+    print(f"Encoding used: {report.get('encoding_used', '')}")
+    if report.get("warning"):
+        print(f"Warning: {report.get('warning')}")
+    print(f"Status counts: {report.get('status_counts', {})}")
+    print(f"Extension counts: {report.get('extension_counts', {})}")
+    print(f"Path fields detected: {report.get('path_fields_detected', {})}")
+    print(f"Existing path count: {report.get('existing_path_count', 0)}")
+    print(f"Missing path count: {report.get('missing_path_count', 0)}")
+    print(f"Suspected mojibake count: {report.get('suspected_mojibake_count', 0)}")
+    entries = report.get("entries", [])
+    if entries:
+        print("Entries:")
+        for entry in entries[:20]:
+            print(
+                f"- [{entry.get('index')}] status={entry.get('status')} "
+                f"exists={'yes' if entry.get('exists') else 'no'} "
+                f"ext={entry.get('extension')} mojibake={'yes' if entry.get('suspected_mojibake') else 'no'}"
+            )
+            print(f"  raw path repr: {entry.get('raw_path_repr')}")
+            print(f"  display path: {entry.get('display_path')}")
+            print(f"  resolved absolute path: {entry.get('resolved_absolute_path')}")
+    sample_existing = report.get("sample_existing_paths", [])
+    if sample_existing:
+        print("Sample existing paths:")
+        for path in sample_existing[:5]:
+            print(f"- {path}")
+    sample_missing = report.get("sample_missing_paths", [])
+    if sample_missing:
+        print("Sample missing paths:")
+        for path in sample_missing[:5]:
+            print(f"- {path}")
+    parents = report.get("common_parent_directory_candidates", [])
+    if parents:
+        print("Common parent directory candidates:")
+        for item in parents[:5]:
+            print(f"- {item.get('parent', '')}: {item.get('count', 0)}")
 
 
 def print_available_commands() -> None:
@@ -430,6 +540,10 @@ def dispatch(argv: List[str]) -> int:
 
     if command == "ingest-lite":
         run_ingest_lite(argv[1:])
+        return 0
+
+    if command == "manifest-doctor":
+        run_manifest_doctor(argv[1:])
         return 0
 
     if command == "search" and len(argv) >= 2:
