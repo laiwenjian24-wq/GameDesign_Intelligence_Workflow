@@ -42,6 +42,41 @@ def has_canon_evidence(context_pack: Dict[str, Any]) -> bool:
     return bool(context_pack.get("canon_context"))
 
 
+def context_pack_from_lite_evidence(evidence: List[Dict[str, Any]]) -> Dict[str, Any]:
+    grouped = {
+        "canon_context": [],
+        "draft_reference": [],
+        "deprecated_warnings": [],
+        "inspiration_context": [],
+        "missing_evidence": [],
+    }
+    for item in evidence:
+        status = item.get("status", "unknown")
+        if status == "canon":
+            grouped["canon_context"].append(item)
+        elif status == "draft":
+            grouped["draft_reference"].append(item)
+        elif status == "deprecated":
+            grouped["deprecated_warnings"].append(item)
+        elif status == "inspiration":
+            grouped["inspiration_context"].append(item)
+    if not grouped["canon_context"]:
+        grouped["missing_evidence"].append("No canon evidence retrieved from Lite KB.")
+    return grouped
+
+
+def evidence_snippet_markdown(evidence: List[Dict[str, Any]], limit: int = 5) -> str:
+    if not evidence:
+        return "- No Lite KB evidence retrieved."
+    lines = []
+    for item in evidence[:limit]:
+        lines.append(
+            f"- `{item.get('source_file', '')}` [{item.get('status', 'unknown')}] "
+            f"{item.get('section_title', '')}: {item.get('excerpt', '')}"
+        )
+    return "\n".join(lines)
+
+
 def source_policy_lines() -> List[str]:
     return [
         "Canon is current truth.",

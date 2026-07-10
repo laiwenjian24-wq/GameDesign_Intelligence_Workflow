@@ -12,6 +12,7 @@ from src.v1.tasks import llm_backend
 
 
 def run_continuity_check_task(user_request: str, plan: TaskPlan) -> DailyAssistantResponse:
+    lite_evidence = plan.metadata.get("lite_evidence", [])
     if plan.provider == "deepseek":
         try:
             return _run_deepseek_continuity_check(user_request, plan)
@@ -43,6 +44,10 @@ def run_continuity_check_task(user_request: str, plan: TaskPlan) -> DailyAssista
     if not issues:
         issues.append("Canon evidence is required; this MVP does not perform full semantic verification.")
 
+    evidence_section = ""
+    if lite_evidence:
+        evidence_section = "\n\n### Evidence Snippets\n" + llm_backend.evidence_snippet_markdown(lite_evidence)
+
     answer = "\n".join(
         [
             f"### Decision: {decision}",
@@ -53,7 +58,7 @@ def run_continuity_check_task(user_request: str, plan: TaskPlan) -> DailyAssista
             "### Suggested Fix",
             suggested_fix,
         ]
-    )
+    ) + evidence_section
     return DailyAssistantResponse(
         user_request=user_request,
         detected_task="continuity_check",
@@ -89,7 +94,12 @@ def _governance_blocking_issue(user_request: str) -> str:
 
 def _run_deepseek_continuity_check(user_request: str, plan: TaskPlan) -> DailyAssistantResponse:
     blocking_issue = _governance_blocking_issue(user_request)
-    context_pack, warnings = llm_backend.build_retrieval_context(user_request)
+    lite_evidence = plan.metadata.get("lite_evidence", [])
+    if lite_evidence:
+        context_pack = llm_backend.context_pack_from_lite_evidence(lite_evidence)
+        warnings = []
+    else:
+        context_pack, warnings = llm_backend.build_retrieval_context(user_request)
     if blocking_issue:
         answer = "\n".join(
             [

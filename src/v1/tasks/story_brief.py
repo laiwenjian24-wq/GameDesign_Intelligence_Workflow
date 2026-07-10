@@ -6,6 +6,7 @@ from src.v1.tasks import llm_backend
 
 
 def run_story_brief(user_request: str, plan: TaskPlan) -> DailyAssistantResponse:
+    lite_evidence = plan.metadata.get("lite_evidence", [])
     if plan.provider == "deepseek":
         try:
             return _run_deepseek_story_brief(user_request, plan)
@@ -19,6 +20,11 @@ def run_story_brief(user_request: str, plan: TaskPlan) -> DailyAssistantResponse
             return response
 
     constraints = ", ".join(plan.constraints) if plan.constraints else "restrained, source-grounded"
+    evidence_note = (
+        "\n### Retrieved Context\n" + llm_backend.evidence_snippet_markdown(lite_evidence)
+        if lite_evidence
+        else ""
+    )
     answer = f"""### Scene Goal
 Clarify the next playable/narrative beat without changing Canon.
 
@@ -26,6 +32,7 @@ Clarify the next playable/narrative beat without changing Canon.
 - Location: Mombasa safehouse if supported by Canon evidence.
 - Characters: {", ".join(plan.entities) or "Mouse and Rin if confirmed by source context"}.
 - Branch scope: {plan.branch_scope or "Needs confirmation"}.
+{evidence_note}
 
 ### Character Constraints
 - Keep the tone restrained.
@@ -60,7 +67,12 @@ Turn this brief into a scene-function card before drafting dialogue.
 
 
 def _run_deepseek_story_brief(user_request: str, plan: TaskPlan) -> DailyAssistantResponse:
-    context_pack, warnings = llm_backend.build_retrieval_context(user_request)
+    lite_evidence = plan.metadata.get("lite_evidence", [])
+    if lite_evidence:
+        context_pack = llm_backend.context_pack_from_lite_evidence(lite_evidence)
+        warnings = []
+    else:
+        context_pack, warnings = llm_backend.build_retrieval_context(user_request)
     if not llm_backend.has_canon_evidence(context_pack):
         payload = llm_backend.missing_evidence_payload(
             "No Canon evidence was retrieved for this story brief."

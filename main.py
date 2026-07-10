@@ -28,6 +28,8 @@ from src.workflows.continuity_checker import (
 )
 from src.workflows.ingest_workflow import run_ingestion_workflow
 from src.v1.chat.daily_assistant import run_daily_assistant
+from src.v1.ingestion.lite_document_loader import available_parsers
+from src.v1.kb.lite_index import build_lite_index, save_lite_index
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -46,6 +48,7 @@ AVAILABLE_COMMANDS = [
     "ask-full",
     "ask-rag",
     "chat",
+    "ingest-lite",
     "check",
 ]
 
@@ -315,6 +318,97 @@ def run_chat(request_text: str, provider: str = "fake") -> None:
     _print_cli_text(response.to_markdown())
 
 
+def run_chat_with_kb(request_text: str, provider: str = "fake", kb_path: str = "") -> None:
+    """Run the v1 assistant with an optional Lite KB file."""
+    response = run_daily_assistant(
+        request_text,
+        provider=provider,
+        kb_path=kb_path or None,
+    )
+    _print_cli_text(response.to_markdown())
+
+
+def _extract_chat_options(args: List[str]) -> tuple:
+    """Extract --provider and --kb from chat arguments."""
+    provider = "fake"
+    kb_path = ""
+    remaining = []
+    index = 0
+    while index < len(args):
+        item = args[index]
+        if item == "--provider":
+            if index + 1 >= len(args):
+                raise LLMProviderError("--provider requires a value: fake or deepseek.")
+            provider = args[index + 1]
+            index += 2
+            continue
+        if item == "--kb":
+            if index + 1 >= len(args):
+                raise LLMProviderError("--kb requires a path.")
+            kb_path = args[index + 1]
+            index += 2
+            continue
+        remaining.append(item)
+        index += 1
+    return provider, kb_path, remaining
+
+
+def _parse_ingest_lite_args(args: List[str]) -> dict:
+    options = {
+        "input": ["knowledge_base"],
+        "output": "processed/v1_lite_kb.json",
+        "manifest": "knowledge_base/import_manifest.json",
+        "include_ext": [".md", ".docx", ".pdf", ".txt"],
+    }
+    index = 0
+    while index < len(args):
+        item = args[index]
+        if item == "--input":
+            options["input"] = [args[index + 1]]
+            index += 2
+            continue
+        if item == "--output":
+            options["output"] = args[index + 1]
+            index += 2
+            continue
+        if item == "--manifest":
+            options["manifest"] = args[index + 1]
+            index += 2
+            continue
+        if item == "--include-ext":
+            options["include_ext"] = [
+                ext.strip() for ext in args[index + 1].split(",") if ext.strip()
+            ]
+            index += 2
+            continue
+        index += 1
+    return options
+
+
+def run_ingest_lite(args: List[str]) -> None:
+    """Build the v1 Lite KB JSON index."""
+    options = _parse_ingest_lite_args(args)
+    kb = build_lite_index(
+        options["input"],
+        manifest_path=options["manifest"],
+        include_ext=options["include_ext"],
+    )
+    output_path = save_lite_index(kb, options["output"])
+    parsers = available_parsers()
+    print("v1 Lite KB ingestion completed.")
+    print(f"Loaded files: {kb.metadata.get('loaded_file_count', 0)}")
+    print(f"Skipped files: {kb.metadata.get('skipped_file_count', 0)}")
+    print(f"Blocks: {len(kb.blocks)}")
+    print(f"Status counts: {kb.status_counts}")
+    print(f"Parser availability: {parsers}")
+    warnings = kb.metadata.get("warnings", [])
+    if warnings:
+        print("Warnings:")
+        for warning in warnings[:20]:
+            print(f"- {warning}")
+    print(f"Output path: {output_path}")
+
+
 def print_available_commands() -> None:
     """Print available CLI commands."""
     print("Available commands:")
@@ -332,6 +426,10 @@ def dispatch(argv: List[str]) -> int:
 
     if command == "ingest":
         run_ingestion()
+        return 0
+
+    if command == "ingest-lite":
+        run_ingest_lite(argv[1:])
         return 0
 
     if command == "search" and len(argv) >= 2:
@@ -389,10 +487,10 @@ def dispatch(argv: List[str]) -> int:
 
     if command == "chat" and len(argv) >= 2:
         try:
-            provider, task_args = _extract_provider(argv[1:])
+            provider, kb_path, task_args = _extract_chat_options(argv[1:])
             if not task_args:
                 raise LLMProviderError("chat requires a natural language request.")
-            run_chat(" ".join(task_args), provider=provider)
+            run_chat_with_kb(" ".join(task_args), provider=provider, kb_path=kb_path)
             return 0
         except LLMProviderError as exc:
             print(str(exc))

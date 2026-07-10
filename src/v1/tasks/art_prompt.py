@@ -6,6 +6,7 @@ from src.v1.tasks import llm_backend
 
 
 def run_art_prompt(user_request: str, plan: TaskPlan) -> DailyAssistantResponse:
+    lite_evidence = plan.metadata.get("lite_evidence", [])
     if plan.provider == "deepseek":
         try:
             return _run_deepseek_art_prompt(user_request, plan)
@@ -19,6 +20,11 @@ def run_art_prompt(user_request: str, plan: TaskPlan) -> DailyAssistantResponse:
             return response
 
     branch = plan.branch_scope or "Branch scope needs confirmation"
+    evidence_note = (
+        "\n### Retrieved Source Context\n" + llm_backend.evidence_snippet_markdown(lite_evidence)
+        if lite_evidence
+        else ""
+    )
     answer = f"""### Production Prompt
 Branch B mutual bandaging scene, restrained trust, practical wound care, safehouse interior, quiet tension, cinematic visual novel CG composition, grounded cyberpunk materials, no melodramatic romance.
 
@@ -38,6 +44,7 @@ Branch B mutual bandaging scene, restrained trust, practical wound care, safehou
 - Visual Bible / CG mapping evidence.
 - Branch B scene state.
 - Character appearance constraints.
+{evidence_note}
 
 ### Suggested Next Step
 Attach Canon visual references before sending this to an image pipeline.
@@ -63,7 +70,12 @@ Attach Canon visual references before sending this to an image pipeline.
 
 
 def _run_deepseek_art_prompt(user_request: str, plan: TaskPlan) -> DailyAssistantResponse:
-    context_pack, warnings = llm_backend.build_retrieval_context(user_request)
+    lite_evidence = plan.metadata.get("lite_evidence", [])
+    if lite_evidence:
+        context_pack = llm_backend.context_pack_from_lite_evidence(lite_evidence)
+        warnings = []
+    else:
+        context_pack, warnings = llm_backend.build_retrieval_context(user_request)
     if not llm_backend.has_canon_evidence(context_pack):
         payload = llm_backend.missing_evidence_payload(
             "No Canon or visual evidence was retrieved for this art prompt brief."

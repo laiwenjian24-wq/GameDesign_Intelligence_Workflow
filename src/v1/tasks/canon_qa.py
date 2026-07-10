@@ -12,6 +12,7 @@ from src.v1.tasks import llm_backend
 
 
 def run_canon_qa(user_request: str, plan: TaskPlan) -> DailyAssistantResponse:
+    lite_evidence = plan.metadata.get("lite_evidence", [])
     if plan.provider == "deepseek":
         try:
             return _run_deepseek_canon_qa(user_request, plan)
@@ -24,7 +25,25 @@ def run_canon_qa(user_request: str, plan: TaskPlan) -> DailyAssistantResponse:
             response.debug_task_plan = fallback_plan.to_dict()
             return response
 
-    if "Rin" in user_request and ("身份" in user_request or "是什么" in user_request):
+    if lite_evidence:
+        canon = [item for item in lite_evidence if item.get("status") == "canon"]
+        if not canon:
+            answer = (
+                "### Decision: NEEDS_REVIEW\n\n"
+                "Lite KB retrieved evidence, but no Canon evidence was available.\n\n"
+                "### Evidence Snippets\n"
+                + llm_backend.evidence_snippet_markdown(lite_evidence)
+            )
+            next_step = "Add or retrieve reviewed Canon evidence before answering as current truth."
+        else:
+            answer = (
+                "### Evidence-backed Canon QA Draft\n\n"
+                "The Lite KB retrieved Canon evidence candidates. Treat this as a grounded draft, not automatic Canon.\n\n"
+                "### Evidence Snippets\n"
+                + llm_backend.evidence_snippet_markdown(canon)
+            )
+            next_step = "Review the cited Canon snippets and then write the final answer."
+    elif "Rin" in user_request and ("身份" in user_request or "是什么" in user_request):
         answer = (
             "MVP demo answer: Rin should be handled as a Canon-evidence-backed "
             "character identity question. The fake provider does not claim final "
@@ -57,7 +76,12 @@ def run_canon_qa(user_request: str, plan: TaskPlan) -> DailyAssistantResponse:
 
 
 def _run_deepseek_canon_qa(user_request: str, plan: TaskPlan) -> DailyAssistantResponse:
-    context_pack, warnings = llm_backend.build_retrieval_context(user_request)
+    lite_evidence = plan.metadata.get("lite_evidence", [])
+    if lite_evidence:
+        context_pack = llm_backend.context_pack_from_lite_evidence(lite_evidence)
+        warnings = []
+    else:
+        context_pack, warnings = llm_backend.build_retrieval_context(user_request)
     if not llm_backend.has_canon_evidence(context_pack):
         payload = llm_backend.missing_evidence_payload(
             "No Canon evidence was retrieved for this Canon QA request."
