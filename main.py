@@ -27,6 +27,7 @@ from src.workflows.continuity_checker import (
     run_continuity_check,
 )
 from src.workflows.ingest_workflow import run_ingestion_workflow
+from src.v1.chat.daily_assistant import run_daily_assistant
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -44,6 +45,7 @@ AVAILABLE_COMMANDS = [
     "context-rag-llm",
     "ask-full",
     "ask-rag",
+    "chat",
     "check",
 ]
 
@@ -307,6 +309,12 @@ def run_ask_rag(question: str, provider: str = "fake") -> None:
     _print_cli_text(format_qa_report_markdown(report))
 
 
+def run_chat(request_text: str, provider: str = "fake") -> None:
+    """Run the v1 Daily Narrative Assistant vertical slice."""
+    response = run_daily_assistant(request_text, provider=provider)
+    _print_cli_text(response.to_markdown())
+
+
 def print_available_commands() -> None:
     """Print available CLI commands."""
     print("Available commands:")
@@ -374,6 +382,17 @@ def dispatch(argv: List[str]) -> int:
             if not task_args:
                 raise LLMProviderError("ask-rag requires a question.")
             run_ask_rag(" ".join(task_args), provider=provider)
+            return 0
+        except LLMProviderError as exc:
+            print(str(exc))
+            return 1
+
+    if command == "chat" and len(argv) >= 2:
+        try:
+            provider, task_args = _extract_provider(argv[1:])
+            if not task_args:
+                raise LLMProviderError("chat requires a natural language request.")
+            run_chat(" ".join(task_args), provider=provider)
             return 0
         except LLMProviderError as exc:
             print(str(exc))
