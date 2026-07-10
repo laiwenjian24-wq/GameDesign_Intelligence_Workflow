@@ -43,6 +43,8 @@ experiments/normalized_context_adapter/sample_outputs/*
 !experiments/normalized_context_adapter/sample_outputs/.gitkeep
 experiments/normalized_context_schema/sample_outputs/*
 !experiments/normalized_context_schema/sample_outputs/.gitkeep
+experiments/json_continuity_check_eval/sample_outputs/*
+!experiments/json_continuity_check_eval/sample_outputs/.gitkeep
 
 # Generated knowledge-base artifacts
 knowledge_base/processed/
