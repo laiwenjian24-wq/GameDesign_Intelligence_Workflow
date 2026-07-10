@@ -138,7 +138,7 @@ def check_claim_against_context_pack(claim: Claim, context_pack: Dict[str, Any])
             _issue(
                 f"issue-{len(issues)+1:04d}",
                 "insufficient_evidence",
-                "medium",
+                "high",
                 claim,
                 inspiration[:3],
                 "The new claim tries to treat Inspiration material as factual evidence.",
@@ -187,6 +187,8 @@ def check_claims_against_context_pack(claims: List[Claim], context_pack: Dict[st
 
 def decision_from_issues(issues: List[ContinuityIssue]) -> str:
     if any(issue.issue_type in ("deprecated_contamination", "draft_overrides_canon") for issue in issues):
+        return "FAIL"
+    if any("Inspiration evidence is thematic reference only" in issue.source_policy for issue in issues):
         return "FAIL"
     if any(issue.severity == "high" for issue in issues):
         return "NEEDS_REVIEW"

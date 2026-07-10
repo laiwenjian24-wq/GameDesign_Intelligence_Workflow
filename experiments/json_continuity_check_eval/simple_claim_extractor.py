@@ -44,7 +44,7 @@ def extract_claims(text: str) -> List[Claim]:
     branch_scope = _branch_scope(text)
     status_intent = _status_intent(text)
 
-    if any(term in text for term in ("覆盖Canon", "覆盖 Canon", "覆盖当前Canon", "作为当前事实", "current fact")):
+    if any(term in text for term in ("覆盖Canon", "覆盖 Canon", "覆盖当前Canon", "作为当前事实", "当前剧情事实", "current fact")):
         claims.append(
             Claim(
                 claim_id=f"claim-{len(claims)+1:04d}",

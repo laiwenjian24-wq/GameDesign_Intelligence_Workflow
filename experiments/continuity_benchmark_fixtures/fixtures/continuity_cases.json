@@ -1,0 +1,98 @@
+[
+  {
+    "case_id": "canon_supported_fact_001",
+    "category": "canon_supported_fact",
+    "input_text": "Rin是Nexus-7仿生人。",
+    "expected_decision": "PASS",
+    "allowed_decisions": ["PASS"],
+    "expected_issue_types": [],
+    "required_evidence_statuses": ["canon"],
+    "forbidden_evidence_statuses": ["draft", "deprecated", "inspiration"],
+    "expected_source_policy": "",
+    "notes": "A direct Canon-supported identity claim should pass when Canon evidence is present."
+  },
+  {
+    "case_id": "unsupported_identity_claim_001",
+    "category": "unsupported_identity_claim",
+    "input_text": "Rin是普通人类。",
+    "expected_decision": "NEEDS_REVIEW",
+    "allowed_decisions": ["NEEDS_REVIEW", "FAIL"],
+    "expected_issue_types": ["insufficient_evidence"],
+    "required_evidence_statuses": ["canon"],
+    "forbidden_evidence_statuses": [],
+    "expected_source_policy": "insufficient",
+    "notes": "The prototype must not pass an identity claim that Canon evidence does not clearly support."
+  },
+  {
+    "case_id": "branch_state_uncertain_001",
+    "category": "branch_state_uncertain",
+    "input_text": "Branch B中Rin右腿受伤。",
+    "expected_decision": "NEEDS_REVIEW",
+    "allowed_decisions": ["NEEDS_REVIEW"],
+    "expected_issue_types": ["branch_state_conflict", "insufficient_evidence"],
+    "required_evidence_statuses": ["canon"],
+    "forbidden_evidence_statuses": [],
+    "expected_source_policy": "branch",
+    "notes": "Branch/injury claims require branch-specific Canon support and should not be guessed."
+  },
+  {
+    "case_id": "deprecated_override_001",
+    "category": "deprecated_override",
+    "input_text": "场景草稿风筝旧版可以覆盖当前Canon。",
+    "expected_decision": "FAIL",
+    "allowed_decisions": ["FAIL"],
+    "expected_issue_types": ["deprecated_contamination"],
+    "required_evidence_statuses": ["canon"],
+    "forbidden_evidence_statuses": ["deprecated"],
+    "expected_source_policy": "Deprecated evidence can explain historical conflicts but cannot be used as current truth.",
+    "notes": "Deprecated material cannot override current Canon."
+  },
+  {
+    "case_id": "deprecated_current_truth_001",
+    "category": "deprecated_current_truth",
+    "input_text": "使用Deprecated资料作为当前事实。",
+    "expected_decision": "FAIL",
+    "allowed_decisions": ["FAIL"],
+    "expected_issue_types": ["deprecated_contamination"],
+    "required_evidence_statuses": ["canon"],
+    "forbidden_evidence_statuses": ["deprecated"],
+    "expected_source_policy": "Deprecated evidence can explain historical conflicts but cannot be used as current truth.",
+    "notes": "Deprecated evidence can be a warning source only."
+  },
+  {
+    "case_id": "draft_override_001",
+    "category": "draft_override",
+    "input_text": "分镜06对白草稿可以覆盖当前Canon。",
+    "expected_decision": "FAIL",
+    "allowed_decisions": ["FAIL"],
+    "expected_issue_types": ["draft_overrides_canon"],
+    "required_evidence_statuses": ["canon"],
+    "forbidden_evidence_statuses": ["draft"],
+    "expected_source_policy": "Draft evidence is reference only and cannot override Canon.",
+    "notes": "Draft material requires human canonization before it can become current truth."
+  },
+  {
+    "case_id": "missing_canon_evidence_001",
+    "category": "missing_canon_evidence",
+    "input_text": "Rin喜欢古典音乐。",
+    "expected_decision": "NEEDS_REVIEW",
+    "allowed_decisions": ["NEEDS_REVIEW"],
+    "expected_issue_types": ["insufficient_evidence"],
+    "required_evidence_statuses": ["canon"],
+    "forbidden_evidence_statuses": [],
+    "expected_source_policy": "insufficient",
+    "notes": "A personal-preference claim needs Canon support; absence should not pass."
+  },
+  {
+    "case_id": "inspiration_as_fact_001",
+    "category": "inspiration_as_fact",
+    "input_text": "灵感碎片可以作为当前剧情事实。",
+    "expected_decision": "FAIL",
+    "allowed_decisions": ["FAIL"],
+    "expected_issue_types": ["insufficient_evidence"],
+    "required_evidence_statuses": ["canon"],
+    "forbidden_evidence_statuses": ["inspiration"],
+    "expected_source_policy": "Inspiration evidence is thematic reference only and cannot be used as fact.",
+    "notes": "Inspiration material cannot become factual evidence without review."
+  }
+]
