@@ -47,6 +47,8 @@ experiments/json_continuity_check_eval/sample_outputs/*
 !experiments/json_continuity_check_eval/sample_outputs/.gitkeep
 experiments/continuity_benchmark_fixtures/sample_outputs/*
 !experiments/continuity_benchmark_fixtures/sample_outputs/.gitkeep
+experiments/docling_real_parser_adapter/sample_outputs/*
+!experiments/docling_real_parser_adapter/sample_outputs/.gitkeep
 
 # Generated knowledge-base artifacts
 knowledge_base/processed/
